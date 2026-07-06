@@ -82,6 +82,8 @@ async function generateWithFallback(prompt, apiKey, timeoutMs) {
 }
 
 function buildPrompt(topic, posts) {
+  const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
+  const isKorean = lang.startsWith('ko');
   const list = posts
     .map((p, i) => {
       const body = p.selftext ? `\n   Body: ${p.selftext.slice(0, 400)}` : '';
@@ -99,23 +101,28 @@ Below are posts already filtered to this topic, from Reddit and Hacker News. Wri
 Rules:
 - Start with ONE short sentence (plain text, no heading) summarizing the theme of this topic today.
 - Then a Markdown bullet list, one bullet per post, in this exact format:
-  - **[<short punchy title>](<link>)** — 1-2 sentences on the key insight and why it is practically useful. (<source>)
-- The <source> tag MUST be included at the end of each bullet, exactly as provided (e.g. "r/LocalLLaMA", "Hacker News").
+  - **[<source>] [<short punchy title>](<link>)** — 1-2 sentences on the key insight and why it is practically useful.
+- The <source> tag MUST be included at the START of each bullet title, exactly as provided (e.g. "r/LocalLLaMA", "Hacker News").
 - Keep it factual and specific. No hype, no filler, no emojis.
 - Do NOT add a topic heading (it is added by the renderer).
 - Skip low-value posts instead of padding.
+- Output language: ${isKorean ? 'Korean (한국어)' : 'English'}.
 
 Posts:
 ${list}`;
 }
 
 function fallbackSection(posts) {
-  const intro = 'AI summary unavailable — showing top posts for this topic.';
+  const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
+  const isKorean = lang.startsWith('ko');
+  const intro = isKorean
+    ? 'AI 요약을 생성하지 못해, 이 토픽의 상위 포스트를 표시합니다.'
+    : 'AI summary unavailable — showing top posts for this topic.';
   const bullets = posts
     .map(p => {
       const origin = p.origin || `r/${p.subreddit}`;
       const engagement = p.score > 0 ? ` — ${p.score} points, ${p.numComments} comments` : '';
-      return `- **[${p.title}](${p.permalink})**${engagement} (${origin})`;
+      return `- **[${origin}] [${p.title}](${p.permalink})**${engagement}`;
     })
     .join('\n');
   return `${intro}\n\n${bullets}`;

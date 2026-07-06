@@ -236,7 +236,14 @@ function headingBlock(level, text) {
  * where a bold span swallows a link inside it.
  */
 export function parseRichText(text) {
+  // If a line starts with a source label like [r/OpenAI] or [Hacker News],
+  // color that label red so source attribution stands out visually.
+  const prefixMatch = text.match(/^\[([^\]]+)\]\s+/);
   const tokens = [];
+  if (prefixMatch) {
+    tokens.push(sourceLabelSegment(prefixMatch[1]));
+    text = text.slice(prefixMatch[0].length);
+  }
   const re =
     /\*\*\[([^\]]+)\]\((https?:\/\/[^)]+)\)\*\*|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/g;
   let last = 0;
@@ -266,6 +273,13 @@ function boldLinkSegment(t, url) {
     type: 'text',
     text: { content: t.slice(0, 2000), link: { url } },
     annotations: { bold: true }
+  };
+}
+function sourceLabelSegment(t) {
+  return {
+    type: 'text',
+    text: { content: `[${t}] ` },
+    annotations: { bold: true, color: 'red' }
   };
 }
 

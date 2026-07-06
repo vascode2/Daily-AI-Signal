@@ -41,12 +41,14 @@ function truthy(v) {
 async function main() {
   const skipNotion =
     process.argv.includes('--skip-notion') || truthy(process.env.DIGEST_SKIP_NOTION);
+  const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
+  const isKorean = lang.startsWith('ko');
 
   const sources = await loadJson('config/sources.json');
   const topicsConfig = await loadJson('config/topics.json');
   const date = digestDate();
 
-  console.log(`\n=== Daily AI Signal — ${date} ===\n`);
+  console.log(`\n=== ${isKorean ? '데일리 AI 시그널' : 'Daily AI Signal'} — ${date} ===\n`);
 
   // 1. Collect from every configured source.
   console.log('[1/5] Collecting posts...');
@@ -100,9 +102,12 @@ async function main() {
       console.warn('[5/5] NOTION_TOKEN or NOTION_PAGE_ID not set; skipping Notion.');
     } else {
       console.log('[5/5] Publishing to Notion...');
+      const notionTitle = isKorean
+        ? `🤖 데일리 AI 시그널 — ${date}`
+        : `🤖 Daily AI Signal — ${date}`;
       const page = await publishDigest({
         markdown,
-        title: `🤖 Daily AI Signal — ${date}`,
+        title: notionTitle,
         parentPageId,
         token
       });

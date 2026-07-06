@@ -25,8 +25,10 @@ export function digestDate(timezone) {
  * @returns {string} markdown
  */
 export function buildDigest({ date, sections, stats }) {
+  const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
+  const isKorean = lang.startsWith('ko');
   const lines = [];
-  lines.push(`# 🤖 Daily AI Signal — ${date}`);
+  lines.push(isKorean ? `# 🤖 데일리 AI 시그널 — ${date}` : `# 🤖 Daily AI Signal — ${date}`);
   lines.push('');
 
   // Source breakdown line.
@@ -36,17 +38,23 @@ export function buildDigest({ date, sections, stats }) {
     .map(([name, n]) => `${name} (${n})`)
     .join(' · ');
   lines.push(
-    `> Collected: ${stats.collected} | Selected: ${stats.kept} | Topics: ${stats.topics}`
+    isKorean
+      ? `> 수집: ${stats.collected} | 선정: ${stats.kept} | 토픽: ${stats.topics}`
+      : `> Collected: ${stats.collected} | Selected: ${stats.kept} | Topics: ${stats.topics}`
   );
   if (originList) {
-    lines.push(`> Sources: ${originList}`);
+    lines.push(isKorean ? `> 출처: ${originList}` : `> Sources: ${originList}`);
   }
   lines.push('');
   lines.push('---');
   lines.push('');
 
   if (sections.length === 0) {
-    lines.push('_No high-signal posts matched your topics today._');
+    lines.push(
+      isKorean
+        ? '_오늘은 설정한 토픽에 맞는 고신호 포스트가 없습니다._'
+        : '_No high-signal posts matched your topics today._'
+    );
     lines.push('');
     return lines.join('\n');
   }
