@@ -1,0 +1,41 @@
+{
+  "maxPostsPerTopic": 5,
+  "topics": [
+    {
+      "name": "Local LLMs",
+      "keywords": ["local llm", "local model", "ollama", "llama.cpp", "gguf", "quantization", "quantized", "vllm", "lm studio", "on-device", "run locally", "self-hosted model"]
+    },
+    {
+      "name": "Open-Source Models",
+      "keywords": ["open source", "open-source", "open weight", "hugging face", "huggingface", "mistral", "llama 3", "llama-3", "phi-", "gemma", "qwen", "deepseek", "fine-tune", "finetune", "fine tuning", "lora"]
+    },
+    {
+      "name": "AI Coding Tools",
+      "keywords": ["cursor", "claude code", "codex", "copilot", "aider", "continue.dev", "cody", "windsurf", "ai coding", "code generation", "code assistant", "pair programming", "vibe coding"]
+    },
+    {
+      "name": "AI Agents",
+      "keywords": ["agent", "agentic", "multi-agent", "autonomous", "tool use", "tool-use", "function calling", "mcp", "model context protocol", "langchain", "langgraph", "crewai", "autogen", "orchestrator"]
+    },
+    {
+      "name": "AI Automation",
+      "keywords": ["automation", "automate", "workflow", "n8n", "make.com", "zapier", "pipeline", "orchestration", "batch processing", "scheduled"]
+    },
+    {
+      "name": "AI App Development",
+      "keywords": ["ai app", "rag", "retrieval augmented", "retrieval-augmented", "embedding", "vector db", "vector database", "chatbot", "ai api", "sdk", "framework", "prompt template", "structured output"]
+    },
+    {
+      "name": "AI Productivity & Business",
+      "keywords": ["productivity", "side project", "saas", "monetize", "monetization", "startup", "business idea", "use case", "prompt engineering", "workflow", "revenue"]
+    },
+    {
+      "name": "AI Hardware & Edge",
+      "keywords": ["hardware", "edge ai", "edge inference", "on-device", "npu", "tpu", "inference speed", "apple silicon", "m1", "m2", "m3", "m4", "nvidia", "gpu", "vram", "acceleration", "raspberry pi", "jetson"]
+    },
+    {
+      "name": "Practical AI Tools",
+      "keywords": ["tool", "utility", "cli tool", "extension", "plugin", "open sourced", "released", "built a", "i made", "showcase", "demo", "practical", "developer tool"]
+    }
+  ]
+}

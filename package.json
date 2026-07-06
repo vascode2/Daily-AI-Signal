@@ -1,0 +1,26 @@
+{
+  "name": "daily-ai-signal",
+  "version": "0.1.0",
+  "description": "Daily AI signal digest — collects high-signal AI posts from Reddit, filters noise, summarizes with Gemini, and publishes a Markdown digest to a local folder and Notion.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "collect": "node src/index.js --skip-notion",
+    "setup:notion": "node scripts/setup-notion.js"
+  },
+  "keywords": [
+    "ai",
+    "digest",
+    "reddit",
+    "llm",
+    "gemini",
+    "notion"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

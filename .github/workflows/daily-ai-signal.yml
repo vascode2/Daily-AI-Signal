@@ -1,0 +1,101 @@
+name: Daily AI Signal
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 10:30 UTC ~= 06:30 America/New_York (adjust seasonally for DST if needed)
+    - cron: "30 10 * * *"
+
+concurrency:
+  group: daily-ai-signal
+  cancel-in-progress: false
+
+jobs:
+  run-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      GEMINI_MODEL_FALLBACKS: ${{ vars.GEMINI_MODEL_FALLBACKS }}
+      GEMINI_REQUEST_TIMEOUT_MS: ${{ vars.GEMINI_REQUEST_TIMEOUT_MS }}
+      GEMINI_DELAY_MS: ${{ vars.GEMINI_DELAY_MS }}
+
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
+      NOTION_ROOT_TITLE: ${{ vars.NOTION_ROOT_TITLE }}
+      NOTION_VERSION: ${{ vars.NOTION_VERSION }}
+      DIGEST_SKIP_NOTION: ${{ vars.DIGEST_SKIP_NOTION }}
+
+      REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+      REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+      REDDIT_USER_AGENT: ${{ vars.REDDIT_USER_AGENT }}
+      REDDIT_DELAY_MS: ${{ vars.REDDIT_DELAY_MS }}
+      REDDIT_RSS_RETRIES: ${{ vars.REDDIT_RSS_RETRIES }}
+      REDDIT_RSS_MAX_429_SUBS: ${{ vars.REDDIT_RSS_MAX_429_SUBS }}
+
+      DIGEST_TIMEZONE: ${{ vars.DIGEST_TIMEZONE }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set sane defaults for optional vars
+        run: |
+          {
+            echo "GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}"
+            echo "GEMINI_MODEL_FALLBACKS=${GEMINI_MODEL_FALLBACKS:-gemini-flash-latest,gemini-2.0-flash,gemini-2.0-flash-lite,gemini-flash-lite-latest}"
+            echo "GEMINI_REQUEST_TIMEOUT_MS=${GEMINI_REQUEST_TIMEOUT_MS:-120000}"
+            echo "GEMINI_DELAY_MS=${GEMINI_DELAY_MS:-5000}"
+
+            echo "NOTION_ROOT_TITLE=${NOTION_ROOT_TITLE:-Daily AI Signal}"
+            echo "NOTION_VERSION=${NOTION_VERSION:-2026-03-11}"
+            echo "DIGEST_SKIP_NOTION=${DIGEST_SKIP_NOTION:-false}"
+
+            echo "REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-daily-ai-signal/0.1 by u/yourusername}"
+            echo "REDDIT_DELAY_MS=${REDDIT_DELAY_MS:-2500}"
+            echo "REDDIT_RSS_RETRIES=${REDDIT_RSS_RETRIES:-2}"
+            echo "REDDIT_RSS_MAX_429_SUBS=${REDDIT_RSS_MAX_429_SUBS:-3}"
+
+            echo "DIGEST_TIMEZONE=${DIGEST_TIMEZONE:-America/New_York}"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate required secrets
+        run: |
+          missing=0
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::Missing required secret GEMINI_API_KEY"
+            missing=1
+          fi
+          if [ -z "$NOTION_TOKEN" ]; then
+            echo "::error::Missing required secret NOTION_TOKEN"
+            missing=1
+          fi
+          if [ -z "$NOTION_PAGE_ID" ]; then
+            echo "::error::Missing required secret NOTION_PAGE_ID"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Run digest pipeline
+        run: npm start
+
+      - name: Upload output markdown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-ai-signal-output
+          path: output/*.md
+          if-no-files-found: ignore

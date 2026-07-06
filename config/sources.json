@@ -1,0 +1,28 @@
+{
+  "reddit": {
+    "enabled": true,
+    "sort": "top",
+    "timeWindow": "day",
+    "limitPerSubreddit": 25,
+    "minScore": 15,
+    "subreddits": [
+      "LocalLLaMA",
+      "MachineLearning",
+      "artificial",
+      "singularity",
+      "OpenAI",
+      "ClaudeAI",
+      "cursor",
+      "selfhosted",
+      "SideProject",
+      "ChatGPTCoding"
+    ]
+  },
+  "hackernews": {
+    "enabled": true,
+    "hoursBack": 48,
+    "minPoints": 30,
+    "limit": 100,
+    "candidatePool": 300
+  }
+}
