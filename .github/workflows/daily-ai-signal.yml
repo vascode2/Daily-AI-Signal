@@ -3,8 +3,10 @@ name: Daily AI Signal
 on:
   workflow_dispatch:
   schedule:
-    # 10:30 UTC ~= 06:30 America/New_York (adjust seasonally for DST if needed)
-    - cron: "30 10 * * *"
+    # 3:00 AM America/New_York (DST-safe): run at both 07:00 and 08:00 UTC,
+    # then gate execution to exactly 03:00 ET in a step below.
+    - cron: "0 7 * * *"
+    - cron: "0 8 * * *"
 
 concurrency:
   group: daily-ai-signal
@@ -53,7 +55,7 @@ jobs:
       - name: Set sane defaults for optional vars
         run: |
           {
-            echo "GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}"
+            echo "GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}"
             echo "GEMINI_MODEL_FALLBACKS=${GEMINI_MODEL_FALLBACKS:-gemini-flash-latest,gemini-2.0-flash,gemini-2.0-flash-lite,gemini-flash-lite-latest}"
             echo "GEMINI_REQUEST_TIMEOUT_MS=${GEMINI_REQUEST_TIMEOUT_MS:-120000}"
             echo "GEMINI_DELAY_MS=${GEMINI_DELAY_MS:-5000}"
@@ -70,7 +72,23 @@ jobs:
             echo "DIGEST_TIMEZONE=${DIGEST_TIMEZONE:-America/New_York}"
           } >> "$GITHUB_ENV"
 
+      - name: Run only at 03:00 ET (scheduled runs)
+        if: github.event_name == 'schedule'
+        run: |
+          et_hour=$(TZ=America/New_York date +%H)
+          if [ "$et_hour" != "03" ]; then
+            echo "Skipping schedule trigger outside 03:00 ET (current ET hour: $et_hour)."
+            echo "RUN_PIPELINE=false" >> "$GITHUB_ENV"
+          else
+            echo "RUN_PIPELINE=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Enable pipeline for manual runs
+        if: github.event_name != 'schedule'
+        run: echo "RUN_PIPELINE=true" >> "$GITHUB_ENV"
+
       - name: Validate required secrets
+        if: env.RUN_PIPELINE == 'true'
         run: |
           missing=0
           if [ -z "$GEMINI_API_KEY" ]; then
@@ -90,6 +108,7 @@ jobs:
           fi
 
       - name: Run digest pipeline
+        if: env.RUN_PIPELINE == 'true'
         run: npm start
 
       - name: Upload output markdown

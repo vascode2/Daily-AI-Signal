@@ -56,6 +56,7 @@ This repo includes a scheduled workflow at
 `.github/workflows/daily-ai-signal.yml`.
 
 - Schedule: daily at `10:30 UTC` (about `06:30 America/New_York`)
+- Schedule: daily at `03:00 America/New_York` (DST-safe via `07:00` + `08:00` UTC triggers)
 - Also supports manual run via **Actions → Daily AI Signal → Run workflow**
 
 ### Required GitHub repository secrets
