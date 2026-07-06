@@ -58,7 +58,9 @@ function normalizeMarkdownLinks(text) {
   if (!text) return text;
   return text
     .replace(/\[([^\]]+)\]\s+\((https?:\/\/[^)]+)\)/g, '[$1]($2)')
-    .replace(/\*\*\[([^\]]+)\]\s+\((https?:\/\/[^)]+)\)\*\*/g, '**[$1]($2)**');
+    .replace(/\*\*\[([^\]]+)\]\s+\((https?:\/\/[^)]+)\)\*\*/g, '**[$1]($2)**')
+    .replace(/\[([^\]]+)\]\s*\n\s*\((https?:\/\/[^)]+)\)/g, '[$1]($2)')
+    .replace(/\*\*\[([^\]]+)\]\s*\n\s*\((https?:\/\/[^)]+)\)\*\*/g, '**[$1]($2)**');
 }
 
 /**
@@ -113,8 +115,8 @@ Below are posts already filtered to this topic, from Reddit and Hacker News. Wri
 Rules:
 - Start with ONE short sentence (plain text, no heading) summarizing the theme of this topic today.
 - Then a Markdown bullet list, one bullet per post, in this exact format:
-  - **[<source>] [<short punchy title>](<link>)** — 1-2 sentences on the key insight and why it is practically useful.
-- The <source> tag MUST be included at the START of each bullet title, exactly as provided (e.g. "r/LocalLLaMA", "Hacker News").
+  - **[<short punchy title>](<link>)** — 1-2 sentences on the key insight and why it is practically useful. (<source>)
+- The <source> tag MUST be included at the END of each bullet, exactly as provided (e.g. "r/LocalLLaMA", "Hacker News").
 - Keep it factual and specific. No hype, no filler, no emojis.
 - Do NOT add a topic heading (it is added by the renderer).
 - Skip low-value posts instead of padding.
@@ -134,7 +136,7 @@ function fallbackSection(posts) {
     .map(p => {
       const origin = p.origin || `r/${p.subreddit}`;
       const engagement = p.score > 0 ? ` — ${p.score} points, ${p.numComments} comments` : '';
-      return `- **[${origin}] [${p.title}](${p.permalink})**${engagement}`;
+      return `- **[${p.title}](${p.permalink})**${engagement} (${origin})`;
     })
     .join('\n');
   return `${intro}\n\n${bullets}`;
