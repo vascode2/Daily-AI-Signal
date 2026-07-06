@@ -3,10 +3,10 @@ name: Daily AI Signal
 on:
   workflow_dispatch:
   schedule:
-    # 3:00 AM America/New_York (DST-safe): run at both 07:00 and 08:00 UTC,
-    # then gate execution to exactly 03:00 ET in a step below.
-    - cron: "0 7 * * *"
-    - cron: "0 8 * * *"
+    # 3:30 AM America/New_York (DST-safe): run at both 07:30 and 08:30 UTC,
+    # then gate execution to exactly 03:30 ET in a step below.
+    - cron: "30 7 * * *"
+    - cron: "30 8 * * *"
 
 concurrency:
   group: daily-ai-signal
@@ -38,6 +38,7 @@ jobs:
       REDDIT_RSS_MAX_429_SUBS: ${{ vars.REDDIT_RSS_MAX_429_SUBS }}
 
       DIGEST_TIMEZONE: ${{ vars.DIGEST_TIMEZONE }}
+      DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE }}
 
     steps:
       - name: Checkout
@@ -70,14 +71,16 @@ jobs:
             echo "REDDIT_RSS_MAX_429_SUBS=${REDDIT_RSS_MAX_429_SUBS:-3}"
 
             echo "DIGEST_TIMEZONE=${DIGEST_TIMEZONE:-America/New_York}"
+            echo "DIGEST_LANGUAGE=${DIGEST_LANGUAGE:-en}"
           } >> "$GITHUB_ENV"
 
-      - name: Run only at 03:00 ET (scheduled runs)
+      - name: Run only at 03:30 ET (scheduled runs)
         if: github.event_name == 'schedule'
         run: |
           et_hour=$(TZ=America/New_York date +%H)
-          if [ "$et_hour" != "03" ]; then
-            echo "Skipping schedule trigger outside 03:00 ET (current ET hour: $et_hour)."
+          et_min=$(TZ=America/New_York date +%M)
+          if [ "$et_hour" != "03" ] || [ "$et_min" != "30" ]; then
+            echo "Skipping schedule trigger outside 03:30 ET (current ET time: ${et_hour}:${et_min})."
             echo "RUN_PIPELINE=false" >> "$GITHUB_ENV"
           else
             echo "RUN_PIPELINE=true" >> "$GITHUB_ENV"
