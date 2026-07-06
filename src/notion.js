@@ -245,7 +245,7 @@ export function parseRichText(text) {
     text = text.slice(prefixMatch[0].length);
   }
   const re =
-    /\*\*\[([^\]]+)\]\((https?:\/\/[^)]+)\)\*\*|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/g;
+    /\*\*\[([^\]]+)\]\s*\((https?:\/\/[^)]+)\)\*\*|\[([^\]]+)\]\s*\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/g;
   let last = 0;
   let m;
   while ((m = re.exec(text)) !== null) {

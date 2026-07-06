@@ -50,6 +50,18 @@ async function callGemini(model, prompt, apiKey, timeoutMs) {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /**
+ * Gemini sometimes emits near-valid links like `[title] (https://...)`.
+ * Normalize them to strict markdown `[title](https://...)` so downstream
+ * Notion conversion preserves clickable links.
+ */
+function normalizeMarkdownLinks(text) {
+  if (!text) return text;
+  return text
+    .replace(/\[([^\]]+)\]\s+\((https?:\/\/[^)]+)\)/g, '[$1]($2)')
+    .replace(/\*\*\[([^\]]+)\]\s+\((https?:\/\/[^)]+)\)\*\*/g, '**[$1]($2)**');
+}
+
+/**
  * Try each model in order. For a 429 (quota), honor Retry-After and retry the
  * same model once before moving on. Advance to the next model on 404/5xx.
  */
@@ -150,7 +162,10 @@ export async function summarizeGroups(groups) {
         apiKey,
         timeoutMs
       );
-      results.push({ topic: g.topic, section: section || fallbackSection(g.posts) });
+      results.push({
+        topic: g.topic,
+        section: normalizeMarkdownLinks(section || fallbackSection(g.posts))
+      });
       console.log(`[summarize] ${g.topic}: done.`);
     } catch (err) {
       console.error(`[summarize] ${g.topic} failed: ${err.message}`);
