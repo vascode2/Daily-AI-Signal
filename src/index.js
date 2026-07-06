@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 
 import * as reddit from './collectors/reddit.js';
 import * as hackernews from './collectors/hackernews.js';
+import * as x from './collectors/x.js';
 import { filterAndGroup } from './filter.js';
 import { summarizeGroups } from './summarize.js';
 import { buildDigest, saveDigest, digestDate } from './render-markdown.js';
@@ -28,7 +29,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
 // Registry of available source collectors. Add new sources here later.
-const COLLECTORS = { reddit, hackernews };
+const COLLECTORS = { reddit, hackernews, x };
 
 async function loadJson(relPath) {
   return JSON.parse(await readFile(join(ROOT, relPath), 'utf-8'));

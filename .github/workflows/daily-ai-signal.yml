@@ -37,6 +37,11 @@ jobs:
       REDDIT_RSS_RETRIES: ${{ vars.REDDIT_RSS_RETRIES }}
       REDDIT_RSS_MAX_429_SUBS: ${{ vars.REDDIT_RSS_MAX_429_SUBS }}
 
+      X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+      X_API_BASE: ${{ vars.X_API_BASE }}
+      X_PLAYWRIGHT_COMMAND: ${{ vars.X_PLAYWRIGHT_COMMAND }}
+      X_PLAYWRIGHT_TIMEOUT_MS: ${{ vars.X_PLAYWRIGHT_TIMEOUT_MS }}
+
       DIGEST_TIMEZONE: ${{ vars.DIGEST_TIMEZONE }}
       DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE }}
 
@@ -69,6 +74,9 @@ jobs:
             echo "REDDIT_DELAY_MS=${REDDIT_DELAY_MS:-2500}"
             echo "REDDIT_RSS_RETRIES=${REDDIT_RSS_RETRIES:-2}"
             echo "REDDIT_RSS_MAX_429_SUBS=${REDDIT_RSS_MAX_429_SUBS:-3}"
+
+            echo "X_API_BASE=${X_API_BASE:-https://api.twitter.com/2}"
+            echo "X_PLAYWRIGHT_TIMEOUT_MS=${X_PLAYWRIGHT_TIMEOUT_MS:-120000}"
 
             echo "DIGEST_TIMEZONE=${DIGEST_TIMEZONE:-America/New_York}"
             echo "DIGEST_LANGUAGE=${DIGEST_LANGUAGE:-en}"

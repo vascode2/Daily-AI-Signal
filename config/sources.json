@@ -24,5 +24,26 @@
     "minPoints": 30,
     "limit": 100,
     "candidatePool": 300
+  },
+  "x": {
+    "enabled": false,
+    "mode": "api",
+    "lang": "en",
+    "hoursBack": 24,
+    "maxResults": 30,
+    "minScore": 3,
+    "accounts": [
+      "OpenAI",
+      "AnthropicAI",
+      "cursor_ai",
+      "ollama"
+    ],
+    "keywords": [
+      "local llm",
+      "open source ai",
+      "claude code",
+      "copilot",
+      "ai agent"
+    ]
   }
 }

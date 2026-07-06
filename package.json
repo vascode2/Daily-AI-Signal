@@ -9,7 +9,9 @@
   "scripts": {
     "start": "node src/index.js",
     "collect": "node src/index.js --skip-notion",
-    "setup:notion": "node scripts/setup-notion.js"
+    "setup:notion": "node scripts/setup-notion.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "e2e:x": "node scripts/e2e-x.js"
   },
   "keywords": [
     "ai",

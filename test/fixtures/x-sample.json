@@ -1,0 +1,68 @@
+[
+  {
+    "id": "1900000000000000001",
+    "text": "We just released a new open-weight model on Hugging Face. It runs locally with llama.cpp and GGUF quantization, so you can self-host it on a laptop. Benchmarks and setup guide in the thread.",
+    "username": "AnthropicAI",
+    "authorId": "111",
+    "createdAt": "2026-07-06T14:00:00.000Z",
+    "likeCount": 4200,
+    "repostCount": 800,
+    "quoteCount": 150,
+    "replyCount": 320
+  },
+  {
+    "id": "1900000000000000002",
+    "text": "Cursor now supports Claude Code style agentic workflows with MCP tool use. Our AI coding assistant can call tools and run multi-step tasks. Here is how the agent orchestrator works.",
+    "username": "cursor_ai",
+    "authorId": "222",
+    "createdAt": "2026-07-06T12:30:00.000Z",
+    "likeCount": 3100,
+    "repostCount": 540,
+    "quoteCount": 90,
+    "replyCount": 210
+  },
+  {
+    "id": "1900000000000000003",
+    "text": "Ollama v0.5 ships faster on-device inference for local LLMs on Apple Silicon (M4). Big VRAM and GPU acceleration improvements for edge AI. Try running quantized models locally today.",
+    "username": "ollama",
+    "authorId": "333",
+    "createdAt": "2026-07-06T10:15:00.000Z",
+    "likeCount": 2600,
+    "repostCount": 420,
+    "quoteCount": 60,
+    "replyCount": 130
+  },
+  {
+    "id": "1900000000000000004",
+    "text": "New RAG framework for AI app development: pluggable vector db, embeddings, and structured output. Built a chatbot SDK on top of it in an afternoon. Open sourced and free.",
+    "username": "OpenAI",
+    "authorId": "444",
+    "createdAt": "2026-07-06T09:00:00.000Z",
+    "likeCount": 5200,
+    "repostCount": 910,
+    "quoteCount": 200,
+    "replyCount": 400
+  },
+  {
+    "id": "1900000000000000005",
+    "text": "gm",
+    "username": "OpenAI",
+    "authorId": "444",
+    "createdAt": "2026-07-06T08:00:00.000Z",
+    "likeCount": 2,
+    "repostCount": 0,
+    "quoteCount": 0,
+    "replyCount": 1
+  },
+  {
+    "id": "1900000000000000006",
+    "text": "Automation tip: chain n8n with a local LLM to build a scheduled workflow pipeline that summarizes your inbox every morning. Full tutorial and template linked.",
+    "username": "AnthropicAI",
+    "authorId": "111",
+    "createdAt": "2026-07-06T07:30:00.000Z",
+    "likeCount": 1800,
+    "repostCount": 300,
+    "quoteCount": 40,
+    "replyCount": 95
+  }
+]

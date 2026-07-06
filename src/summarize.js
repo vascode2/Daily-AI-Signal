@@ -110,13 +110,14 @@ function buildPrompt(topic, posts) {
   return `You are an AI-signal curator writing a daily digest for a technical engineer.
 Topic: "${topic}"
 
-Below are posts already filtered to this topic, from Reddit and Hacker News. Write a concise, high-signal Markdown section.
+Below are posts already filtered to this topic, gathered from multiple sources
+(e.g. Reddit, Hacker News, and X/Twitter). Write a concise, high-signal Markdown section.
 
 Rules:
 - Start with ONE short sentence (plain text, no heading) summarizing the theme of this topic today.
 - Then a Markdown bullet list, one bullet per post, in this exact format:
   - **[<short punchy title>](<link>)** — 1-2 sentences on the key insight and why it is practically useful. (<source>)
-- The <source> tag MUST be included at the END of each bullet, exactly as provided (e.g. "r/LocalLLaMA", "Hacker News").
+- The <source> tag MUST be included at the END of each bullet, exactly as provided (e.g. "r/LocalLLaMA", "Hacker News", "X/@OpenAI").
 - Keep it factual and specific. No hype, no filler, no emojis.
 - Do NOT add a topic heading (it is added by the renderer).
 - Skip low-value posts instead of padding.

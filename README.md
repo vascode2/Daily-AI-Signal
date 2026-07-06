@@ -48,7 +48,24 @@ into `NOTION_PAGE_ID`.
 ```bash
 npm start          # full pipeline: collect → summarize → save → publish to Notion
 npm run collect    # same, but skip Notion (writes local Markdown only)
+npm test           # run the unit + integration tests (node:test, no deps)
+npm run e2e:x      # end-to-end smoke test of the X source (fixture → Gemini → Markdown)
 ```
+
+### X.com source
+
+X is a plugin-style collector (disabled by default). Enable it in
+`config/sources.json` (`x.enabled = true`) and choose a `mode`:
+
+- `mode: "api"` — official X recent-search API. Needs `X_BEARER_TOKEN`.
+- `mode: "playwright"` — an external scraper command (`X_PLAYWRIGHT_COMMAND`)
+  that prints a JSON array of posts to stdout.
+- `mode: "fixture"` — load posts from a local JSON file
+  (`X_FIXTURE_PATH`, default `test/fixtures/x-sample.json`). No credentials
+  needed — ideal for offline testing, CI, and demos.
+
+The `hoursBack`, `minScore`, and `lang` settings in the `x` config are applied
+uniformly across all modes.
 
 ## GitHub Actions (Daily Automation)
 
@@ -68,6 +85,7 @@ This repo includes a scheduled workflow at
 
 - `REDDIT_CLIENT_ID`
 - `REDDIT_CLIENT_SECRET`
+- `X_BEARER_TOKEN`
 
 ### Optional GitHub repository variables
 
@@ -84,13 +102,24 @@ This repo includes a scheduled workflow at
 - `REDDIT_DELAY_MS`
 - `REDDIT_RSS_RETRIES`
 - `REDDIT_RSS_MAX_429_SUBS`
+- `X_API_BASE`
+- `X_PLAYWRIGHT_COMMAND`
+- `X_PLAYWRIGHT_TIMEOUT_MS`
 
 If Reddit OAuth secrets are not provided, the workflow still runs with Reddit RSS
 best-effort collection plus Hacker News.
 
+X is scaffolded in plugin form but disabled by default. When you are ready, set
+`config/sources.json -> x.enabled = true`, then choose either:
+
+- `mode: "api"` + `X_BEARER_TOKEN`
+- `mode: "playwright"` + `X_PLAYWRIGHT_COMMAND`
+- `mode: "fixture"` + `X_FIXTURE_PATH` (offline/CI, no credentials)
+
 ## Configuration
 
 - `config/sources.json` — subreddits, sort (`top`/`hot`/`new`), time window, per-sub limit, min score.
+- `config/sources.json` — source settings for Reddit, Hacker News, and future X collection.
 - `config/topics.json` — topics, their matching keywords, and max posts per topic.
 
 All secrets and tunables live in `.env` (see `.env.example`).
@@ -104,6 +133,8 @@ config/
 src/
   collectors/
     reddit.js           # Reddit collector (implements the collect() contract)
+    hackernews.js       # Hacker News collector (official Firebase API)
+    x.js                # X.com collector (api | playwright plugin scaffold)
   filter.js             # relevance filter, ranking, topic grouping
   summarize.js          # Gemini summarization (raw HTTP + model fallback)
   render-markdown.js    # builds and saves the Markdown digest
