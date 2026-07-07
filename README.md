@@ -95,6 +95,32 @@ X, the cheapest path is funding a small amount of xAI credits (check the
 data-sharing free-credits program at <https://console.x.ai> → Billing), then set
 `x.enabled = true`.
 
+### How to add X cheaply (options people actually use)
+
+If you want X without the full Twitter API price, these are the realistic routes,
+roughly cheapest/most-reliable first. All of them plug into the **existing
+`playwright` mode** (any command that prints a JSON array of posts to stdout) with
+**no code changes** — see the normalized fields in `test/fixtures/x-sample.json`.
+
+- **Third-party scraper APIs (best value)** — services that scrape X and return
+  JSON, usually with a small free tier and no Twitter dev account:
+  [Apify](https://apify.com) Twitter/X actors, `twitterapi.io`,
+  `socialdata.tools`, `scrapecreators.com`, or "Twitter" endpoints on RapidAPI.
+  Wrap the call in a tiny script, set `X_PLAYWRIGHT_COMMAND` to run it, and set
+  `x.mode = "playwright"`.
+- **xAI/Grok `x_search`** — already implemented as `mode: "grok"`; needs credits
+  but is the least custom code.
+- **`snscrape` (free, flaky)** — the open-source `snscrape` CLI pulls tweets with
+  no key. Great for a manual laptop run; unreliable in an automated GitHub Action
+  because X rate-limits/blocks CI IPs.
+- **RSS bridges (free, unstable)** — RSSHub or a self-hosted Nitter instance can
+  expose X accounts as RSS; most public Nitter instances are now dead, so this
+  needs self-hosting.
+
+Rule of thumb: for a **reliable daily automated** digest, a paid-but-cheap
+scraper API or Grok credits is what holds up; free scrapers are fine for manual
+runs but tend to break in CI.
+
 ## GitHub Actions (Daily Automation)
 
 This repo includes a scheduled workflow at
