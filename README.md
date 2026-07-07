@@ -54,15 +54,19 @@ npm run e2e:x      # end-to-end smoke test of the X source (fixture → Gemini �
 
 ### X.com source
 
+**X is disabled by default to keep the pipeline free.** Reddit + Hacker News +
+the Gemini free API tier cost nothing to run. X requires a paid data source (see
+Cost & budget below), so enable it only when you're ready.
+
 X is a plugin-style collector. Enable it in `config/sources.json`
 (`x.enabled = true`) and choose a `mode`:
 
 - `mode: "grok"` — **use your Grok/xAI API key** (`XAI_API_KEY`) with the
   built-in `x_search` tool. This is the easiest way to collect X posts and does
   **not** require a Twitter developer account. Note: a Grok key is NOT a
-  Twitter/X bearer token.
+  Twitter/X bearer token, and the xAI API is **paid** (needs credits).
 - `mode: "api"` — official X recent-search API. Needs a Twitter developer
-  `X_BEARER_TOKEN`.
+  `X_BEARER_TOKEN` (the free Twitter tier has no search).
 - `mode: "playwright"` — an external scraper command (`X_PLAYWRIGHT_COMMAND`)
   that prints a JSON array of posts to stdout.
 - `mode: "fixture"` — load posts from a local JSON file
@@ -71,6 +75,25 @@ X is a plugin-style collector. Enable it in `config/sources.json`
 
 The `hoursBack`, `minScore`, and `lang` settings in the `x` config are applied
 uniformly across all modes.
+
+## Cost & budget
+
+This project is designed to run **for free**:
+
+- **Reddit** — free (public RSS, or free OAuth app credentials).
+- **Hacker News** — free (public Firebase API).
+- **Gemini summarization** — free API tier from Google AI Studio
+  (`GEMINI_API_KEY`). Note: a Gemini **Advanced** consumer subscription is not
+  the same thing — you need an API key, which has its own free tier.
+- **Notion publishing** — free.
+
+**X is the only paid source.** There is no usable free tier for X search:
+xAI's `x_search` (grok mode) needs account credits, and Twitter's free API has
+no search. Consumer chat subscriptions (ChatGPT Plus, Claude Pro, Gemini
+Advanced) do **not** provide API access, so they can't be used here. If you want
+X, the cheapest path is funding a small amount of xAI credits (check the
+data-sharing free-credits program at <https://console.x.ai> → Billing), then set
+`x.enabled = true`.
 
 ## GitHub Actions (Daily Automation)
 
