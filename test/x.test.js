@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import { collect, __test__ } from '../src/collectors/x.js';
 
-const { buildApiQuery, normalizeXPost, mapRawRows, applyGates, compactText, toEpochSeconds } =
+const { buildApiQuery, normalizeXPost, mapRawRows, applyGates, compactText, toEpochSeconds, parseXStatusUrl, extractResponsesText, extractJsonArray, buildGrokPrompt } =
   __test__;
 
 test('buildApiQuery combines accounts, keywords, and filters', () => {
@@ -79,6 +79,76 @@ test('mapRawRows accepts flexible scraper field names and drops empties', () => 
   assert.equal(posts.length, 2);
   assert.equal(posts[0].id, 'x:1');
   assert.equal(posts[1].id, 'x:2');
+});
+
+test('parseXStatusUrl extracts username and id from post URLs', () => {
+  assert.deepEqual(parseXStatusUrl('https://x.com/OpenAI/status/1900000000000000004'), {
+    username: 'OpenAI',
+    id: '1900000000000000004'
+  });
+  assert.deepEqual(parseXStatusUrl('https://twitter.com/ollama/status/123?s=20'), {
+    username: 'ollama',
+    id: '123'
+  });
+  assert.deepEqual(parseXStatusUrl('https://x.com/OpenAI'), { username: '', id: '' });
+  assert.deepEqual(parseXStatusUrl(''), { username: '', id: '' });
+});
+
+test('mapRawRows derives id/username from a Grok-style url-only row', () => {
+  const rows = [
+    {
+      url: 'https://x.com/AnthropicAI/status/1900000000000000009',
+      text: 'New model drop',
+      createdAt: '2026-07-06T00:00:00Z',
+      likeCount: 100
+    },
+    { url: 'https://x.com/NoStatusHere', text: 'no id -> dropped' }
+  ];
+  const posts = mapRawRows(rows);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].id, 'x:1900000000000000009');
+  assert.equal(posts[0].author, 'AnthropicAI');
+  assert.equal(posts[0].permalink, 'https://x.com/AnthropicAI/status/1900000000000000009');
+});
+
+test('extractResponsesText reads Responses API output shape', () => {
+  const data = {
+    output: [
+      { type: 'reasoning', content: [] },
+      { type: 'message', content: [{ type: 'output_text', text: '[{"a":1}]' }] }
+    ]
+  };
+  assert.equal(extractResponsesText(data), '[{"a":1}]');
+});
+
+test('extractResponsesText falls back to output_text and chat-completions shapes', () => {
+  assert.equal(extractResponsesText({ output_text: 'hello' }), 'hello');
+  assert.equal(
+    extractResponsesText({ choices: [{ message: { content: 'world' } }] }),
+    'world'
+  );
+  assert.equal(extractResponsesText({}), '');
+});
+
+test('extractJsonArray handles fenced, prose-wrapped, and invalid input', () => {
+  assert.deepEqual(extractJsonArray('```json\n[{"x":1}]\n```'), [{ x: 1 }]);
+  assert.deepEqual(extractJsonArray('Here you go: [{"x":2}] cheers'), [{ x: 2 }]);
+  assert.deepEqual(extractJsonArray('no array here'), []);
+  assert.deepEqual(extractJsonArray('[not valid json]'), []);
+});
+
+test('buildGrokPrompt includes accounts, keywords, and JSON instruction', () => {
+  const prompt = buildGrokPrompt({
+    accounts: ['@OpenAI', 'ollama'],
+    keywords: ['local llm'],
+    lang: 'en',
+    maxResults: 10
+  });
+  assert.match(prompt, /@OpenAI/);
+  assert.match(prompt, /@ollama/);
+  assert.match(prompt, /local llm/);
+  assert.match(prompt, /JSON array/);
+  assert.match(prompt, /x_search/);
 });
 
 test('toEpochSeconds handles ISO, epoch seconds, epoch millis, and junk', () => {

@@ -41,6 +41,10 @@ jobs:
       X_API_BASE: ${{ vars.X_API_BASE }}
       X_PLAYWRIGHT_COMMAND: ${{ vars.X_PLAYWRIGHT_COMMAND }}
       X_PLAYWRIGHT_TIMEOUT_MS: ${{ vars.X_PLAYWRIGHT_TIMEOUT_MS }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      XAI_API_BASE: ${{ vars.XAI_API_BASE }}
+      XAI_MODEL: ${{ vars.XAI_MODEL }}
+      XAI_REQUEST_TIMEOUT_MS: ${{ vars.XAI_REQUEST_TIMEOUT_MS }}
 
       DIGEST_TIMEZONE: ${{ vars.DIGEST_TIMEZONE }}
       DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE }}
@@ -77,6 +81,9 @@ jobs:
 
             echo "X_API_BASE=${X_API_BASE:-https://api.twitter.com/2}"
             echo "X_PLAYWRIGHT_TIMEOUT_MS=${X_PLAYWRIGHT_TIMEOUT_MS:-120000}"
+            echo "XAI_API_BASE=${XAI_API_BASE:-https://api.x.ai/v1}"
+            echo "XAI_MODEL=${XAI_MODEL:-grok-4.3}"
+            echo "XAI_REQUEST_TIMEOUT_MS=${XAI_REQUEST_TIMEOUT_MS:-120000}"
 
             echo "DIGEST_TIMEZONE=${DIGEST_TIMEZONE:-America/New_York}"
             echo "DIGEST_LANGUAGE=${DIGEST_LANGUAGE:-en}"

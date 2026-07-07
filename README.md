@@ -54,10 +54,15 @@ npm run e2e:x      # end-to-end smoke test of the X source (fixture → Gemini �
 
 ### X.com source
 
-X is a plugin-style collector (disabled by default). Enable it in
-`config/sources.json` (`x.enabled = true`) and choose a `mode`:
+X is a plugin-style collector. Enable it in `config/sources.json`
+(`x.enabled = true`) and choose a `mode`:
 
-- `mode: "api"` — official X recent-search API. Needs `X_BEARER_TOKEN`.
+- `mode: "grok"` — **use your Grok/xAI API key** (`XAI_API_KEY`) with the
+  built-in `x_search` tool. This is the easiest way to collect X posts and does
+  **not** require a Twitter developer account. Note: a Grok key is NOT a
+  Twitter/X bearer token.
+- `mode: "api"` — official X recent-search API. Needs a Twitter developer
+  `X_BEARER_TOKEN`.
 - `mode: "playwright"` — an external scraper command (`X_PLAYWRIGHT_COMMAND`)
   that prints a JSON array of posts to stdout.
 - `mode: "fixture"` — load posts from a local JSON file
@@ -85,7 +90,8 @@ This repo includes a scheduled workflow at
 
 - `REDDIT_CLIENT_ID`
 - `REDDIT_CLIENT_SECRET`
-- `X_BEARER_TOKEN`
+- `X_BEARER_TOKEN` (only for X `api` mode)
+- `XAI_API_KEY` (only for X `grok` mode — your Grok/xAI key)
 
 ### Optional GitHub repository variables
 
@@ -105,14 +111,18 @@ This repo includes a scheduled workflow at
 - `X_API_BASE`
 - `X_PLAYWRIGHT_COMMAND`
 - `X_PLAYWRIGHT_TIMEOUT_MS`
+- `XAI_API_BASE`
+- `XAI_MODEL`
+- `XAI_REQUEST_TIMEOUT_MS`
 
 If Reddit OAuth secrets are not provided, the workflow still runs with Reddit RSS
 best-effort collection plus Hacker News.
 
-X is scaffolded in plugin form but disabled by default. When you are ready, set
-`config/sources.json -> x.enabled = true`, then choose either:
+X is scaffolded in plugin form. To collect X posts, set
+`config/sources.json -> x.enabled = true`, then choose a mode:
 
-- `mode: "api"` + `X_BEARER_TOKEN`
+- `mode: "grok"` + `XAI_API_KEY` (Grok/xAI key — recommended, no Twitter account)
+- `mode: "api"` + `X_BEARER_TOKEN` (Twitter developer bearer token)
 - `mode: "playwright"` + `X_PLAYWRIGHT_COMMAND`
 - `mode: "fixture"` + `X_FIXTURE_PATH` (offline/CI, no credentials)
 

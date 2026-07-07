@@ -95,16 +95,32 @@ function buildApiQuery({ accounts = [], keywords = [], lang }) {
 }
 
 /**
- * Map "scraper-shaped" rows (playwright output or fixture files) to normalized
- * posts. Accepts flexible field names so external scrapers stay easy to write.
+ * Parse a canonical X/Twitter status URL into { username, id }.
+ * Used by grok/scraper rows that provide a post URL instead of a raw id.
+ */
+function parseXStatusUrl(url) {
+  const m = String(url || '').match(/(?:x|twitter)\.com\/([^/?#]+)\/status\/(\d+)/i);
+  return m ? { username: m[1], id: m[2] } : { username: '', id: '' };
+}
+
+/**
+ * Map "scraper-shaped" rows (playwright output, fixture files, or Grok x_search
+ * results) to normalized posts. Accepts flexible field names so external sources
+ * stay easy to write. Rows may supply a raw `id` + `username`, or just a post
+ * `url` (from which id/username are derived). Rows without a resolvable id are
+ * dropped.
  */
 function mapRawRows(rows) {
   return rows
-    .map(r =>
-      normalizeXPost({
-        id: r.id,
+    .map(r => {
+      const parsed = parseXStatusUrl(r.url ?? r.permalink ?? '');
+      const id = r.id ?? (parsed.id || null);
+      if (!id) return null;
+      const username = r.username ?? parsed.username ?? undefined;
+      return normalizeXPost({
+        id,
         text: r.text,
-        username: r.username,
+        username,
         authorId: r.authorId,
         createdAt: r.createdAt ?? r.created_at ?? r.created,
         lang: r.lang,
@@ -114,8 +130,9 @@ function mapRawRows(rows) {
           quote_count: r.quoteCount ?? r.quote_count ?? 0,
           reply_count: r.replyCount ?? r.reply_count ?? 0
         }
-      })
-    )
+      });
+    })
+    .filter(Boolean)
     .filter(p => p.title && p.id);
 }
 
@@ -276,12 +293,144 @@ async function collectViaFixture(config) {
   return posts;
 }
 
+// ── Grok (xAI) mode ──────────────────────────────────────────────
+//
+// Uses the xAI Responses API with the built-in `x_search` tool to pull recent,
+// high-signal X posts. This is the mode to use with a Grok/xAI API key (which is
+// NOT the same as a Twitter/X developer bearer token).
+//
+// Docs: https://docs.x.ai/developers/tools/x-search
+
+/** Extract assistant text from an xAI Responses API payload (defensive). */
+function extractResponsesText(data) {
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text;
+  }
+  const parts = [];
+  for (const item of data?.output || []) {
+    for (const c of item?.content || []) {
+      if (typeof c?.text === 'string') parts.push(c.text);
+    }
+  }
+  if (parts.length) return parts.join('\n');
+  // Chat-completions-shaped fallback.
+  const choice = data?.choices?.[0]?.message?.content;
+  return typeof choice === 'string' ? choice : '';
+}
+
+/** Pull the first JSON array out of a possibly-fenced / prose-wrapped string. */
+function extractJsonArray(text) {
+  if (!text) return [];
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fence ? fence[1] : text;
+  const start = body.indexOf('[');
+  const end = body.lastIndexOf(']');
+  if (start === -1 || end === -1 || end < start) return [];
+  try {
+    const arr = JSON.parse(body.slice(start, end + 1));
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function buildGrokPrompt(config) {
+  const accounts = (config.accounts || []).map(a => String(a).replace(/^@/, ''));
+  const keywords = config.keywords || [];
+  const maxResults = Math.min(Math.max(Number(config.maxResults || 30), 5), 50);
+
+  const accountLine = accounts.length
+    ? `Prioritize posts from these accounts: ${accounts.map(a => `@${a}`).join(', ')}.`
+    : '';
+  const kwLine = keywords.length
+    ? `Focus on these topics/keywords: ${keywords.join(', ')}.`
+    : '';
+  const langLine = config.lang ? `Prefer posts written in ${config.lang}.` : '';
+
+  return `You are collecting recent, high-signal posts from X (Twitter) for a daily AI engineering digest.
+
+${accountLine}
+${kwLine}
+${langLine}
+Only include substantive posts (product launches, technical insights, tools, guides, benchmarks, announcements). Exclude replies, memes, giveaways, and pure hype.
+
+Use the x_search tool to find real posts, then return ONLY a JSON array (no prose, no markdown fences) of up to ${maxResults} items. Each item MUST have exactly these fields:
+- "url": the canonical post URL, e.g. "https://x.com/<handle>/status/<id>" (must be a real post you found)
+- "username": the author's handle without @
+- "text": the full post text (plain text)
+- "createdAt": ISO 8601 timestamp of the post
+- "lang": two-letter language code (e.g. "en"), or "" if unknown
+- "likeCount", "repostCount", "replyCount", "quoteCount": integer engagement counts if visible, else 0
+
+Return [] if nothing relevant is found. Output must be valid JSON and nothing else.`;
+}
+
+async function collectViaGrok(config) {
+  const apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY;
+  if (!apiKey) {
+    console.warn('[x] XAI_API_KEY (Grok) not set; skipping grok mode.');
+    return [];
+  }
+
+  const base = process.env.XAI_API_BASE || 'https://api.x.ai/v1';
+  const model = config.model || process.env.XAI_MODEL || 'grok-4.3';
+  const timeoutMs = Number(process.env.XAI_REQUEST_TIMEOUT_MS || 120000);
+
+  const accounts = (config.accounts || [])
+    .map(a => String(a).replace(/^@/, ''))
+    .slice(0, 20);
+
+  const xSearch = { type: 'x_search' };
+  if (accounts.length) xSearch.allowed_x_handles = accounts;
+
+  const hoursBack = Number(config.hoursBack || 0);
+  if (hoursBack > 0) {
+    const now = Date.now();
+    const fromMs = now - hoursBack * 3600 * 1000;
+    xSearch.from_date = isoDate(new Date(fromMs));
+    xSearch.to_date = isoDate(new Date(now));
+  }
+
+  const body = {
+    model,
+    input: [{ role: 'user', content: buildGrokPrompt(config) }],
+    tools: [xSearch]
+  };
+
+  const res = await fetch(`${base}/responses`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`xAI Responses API failed (${res.status}): ${text.slice(0, 240)}`);
+  }
+
+  const data = await res.json();
+  const rows = extractJsonArray(extractResponsesText(data));
+  const posts = mapRawRows(rows);
+  console.log(`[x] collected ${posts.length} posts via Grok x_search (model=${model}).`);
+  return posts;
+}
+
 async function collectForMode(mode, config) {
   switch (mode) {
     case 'playwright':
       return collectViaPlaywright(config);
     case 'fixture':
       return collectViaFixture(config);
+    case 'grok':
+      return collectViaGrok(config);
     case 'api':
     default:
       return collectViaApi(config);
@@ -326,5 +475,9 @@ export const __test__ = {
   mapRawRows,
   applyGates,
   compactText,
-  toEpochSeconds
+  toEpochSeconds,
+  parseXStatusUrl,
+  extractResponsesText,
+  extractJsonArray,
+  buildGrokPrompt
 };

@@ -26,12 +26,13 @@
     "candidatePool": 300
   },
   "x": {
-    "enabled": false,
-    "mode": "api",
+    "enabled": true,
+    "mode": "grok",
+    "model": "grok-4.3",
     "lang": "en",
     "hoursBack": 24,
     "maxResults": 30,
-    "minScore": 3,
+    "minScore": 0,
     "accounts": [
       "OpenAI",
       "AnthropicAI",
