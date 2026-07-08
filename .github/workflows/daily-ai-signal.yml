@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   schedule:
     # 3:30 AM America/New_York (DST-safe): run at both 07:30 and 08:30 UTC,
-    # then gate execution to exactly 03:30 ET in a step below.
+    # then a step below picks whichever cron equals 03:30 ET for the current
+    # DST offset (immune to GitHub's scheduler delays — see the gate step).
     - cron: "30 7 * * *"
     - cron: "30 8 * * *"
 
@@ -89,17 +90,28 @@ jobs:
             echo "DIGEST_LANGUAGE=${DIGEST_LANGUAGE:-en}"
           } >> "$GITHUB_ENV"
 
-      - name: Run only at 03:30 ET (scheduled runs)
+      - name: Select the 03:30 ET cron for the current DST period
         if: github.event_name == 'schedule'
+        env:
+          # The cron expression that actually triggered this run.
+          TRIGGERED_CRON: ${{ github.event.schedule }}
         run: |
-          et_hour=$(TZ=America/New_York date +%H)
-          et_min=$(TZ=America/New_York date +%M)
-          if [ "$et_hour" != "03" ] || [ "$et_min" != "30" ]; then
-            echo "Skipping schedule trigger outside 03:30 ET (current ET time: ${et_hour}:${et_min})."
-            echo "RUN_PIPELINE=false" >> "$GITHUB_ENV"
+          # GitHub's scheduler is best-effort and often delays runs by many
+          # minutes/hours, so we must NOT gate on the wall-clock execution time.
+          # Instead, we run once per day by picking the cron that equals 03:30 ET
+          # for the current DST offset:
+          #   EDT (-0400): 07:30 UTC == 03:30 ET  -> use "30 7 * * *"
+          #   EST (-0500): 08:30 UTC == 03:30 ET  -> use "30 8 * * *"
+          offset=$(TZ=America/New_York date +%z)
+          run=false
+          if [ "$offset" = "-0400" ] && [ "$TRIGGERED_CRON" = "30 7 * * *" ]; then run=true; fi
+          if [ "$offset" = "-0500" ] && [ "$TRIGGERED_CRON" = "30 8 * * *" ]; then run=true; fi
+          if [ "$run" = "true" ]; then
+            echo "Running: cron '$TRIGGERED_CRON' matches 03:30 ET (offset $offset)."
           else
-            echo "RUN_PIPELINE=true" >> "$GITHUB_ENV"
+            echo "Skipping: cron '$TRIGGERED_CRON' is not the 03:30 ET cron for offset $offset."
           fi
+          echo "RUN_PIPELINE=$run" >> "$GITHUB_ENV"
 
       - name: Enable pipeline for manual runs
         if: github.event_name != 'schedule'
