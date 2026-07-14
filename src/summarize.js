@@ -10,7 +10,7 @@
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function getModels() {
-  const primary = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const primary = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const fallbacks = (process.env.GEMINI_MODEL_FALLBACKS || '')
     .split(',')
     .map(s => s.trim())
