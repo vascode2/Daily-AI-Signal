@@ -152,3 +152,57 @@ test('an unscored post still loses to a genuinely popular one', () => {
     'the baseline still outranks the weakest scored post, instead of sinking below all of them'
   );
 });
+
+/**
+ * Reddit contributes far more posts than Hacker News and, being self-posts,
+ * earns content bonuses that HN link-posts cannot. Selection must not let the
+ * higher-volume source take every slot.
+ */
+test('a high-volume source cannot crowd out a low-volume one', () => {
+  const topicsConfig = {
+    maxPostsPerTopic: 10,
+    topics: [{ name: 'AI Coding Tools', keywords: ['agent'] }]
+  };
+
+  const bulky = Array.from({ length: 100 }, (_, i) => ({
+    source: 'reddit',
+    id: `r${i}`,
+    title: 'I built an agent workflow',
+    url: `https://reddit.com/${i}`,
+    permalink: `https://reddit.com/${i}`,
+    score: 0,
+    numComments: 0,
+    metricsKnown: false,
+    origin: 'r/ClaudeCode',
+    author: 'a',
+    selftext: 'x'.repeat(400),
+    created: 0
+  }));
+  const scarce = Array.from({ length: 10 }, (_, i) => ({
+    source: 'hackernews',
+    id: `h${i}`,
+    title: 'agent framework release',
+    url: `https://news.ycombinator.com/${i}`,
+    permalink: `https://news.ycombinator.com/${i}`,
+    score: 50 + i * 30,
+    numComments: 20 + i * 10,
+    metricsKnown: true,
+    origin: 'Hacker News',
+    author: 'b',
+    selftext: '',
+    created: 0
+  }));
+
+  const picked = filterAndGroup([...bulky, ...scarce], topicsConfig)[0].posts;
+  const counts = picked.reduce((m, p) => ({ ...m, [p.source]: (m[p.source] || 0) + 1 }), {});
+
+  assert.equal(picked.length, 10);
+  assert.ok(
+    counts.hackernews >= 4,
+    `the smaller source keeps a fair share, got ${JSON.stringify(counts)}`
+  );
+  assert.ok(
+    counts.reddit >= 4,
+    `the larger source is still well represented, got ${JSON.stringify(counts)}`
+  );
+});

@@ -89,6 +89,35 @@ function usefulnessScore(post, unknownPopularity = 0) {
  * @param {object} topicsConfig - parsed config/topics.json
  * @returns {Array<{topic: string, posts: Array}>} groups ordered by topic config
  */
+/**
+ * Order candidates so sources take turns: every source's best post, then every
+ * source's second-best, and so on.
+ *
+ * Usefulness is only meaningful *within* a source. Reddit RSS posts have no
+ * popularity data and are self-posts (earning the `hasBody` and "i built"
+ * bonuses), while Hacker News posts are mostly bare links. Sorting the merged
+ * pool by raw usefulness therefore lets whichever source contributed more posts
+ * crowd the other out entirely. Comparing like-for-like rank keeps the digest a
+ * genuine mix.
+ */
+function interleaveBySource(candidates) {
+  const bySource = new Map();
+  for (const post of candidates) {
+    if (!bySource.has(post.source)) bySource.set(post.source, []);
+    bySource.get(post.source).push(post);
+  }
+
+  const ranked = [];
+  for (const list of bySource.values()) {
+    list.sort((a, b) => b.usefulness - a.usefulness);
+    list.forEach((post, rank) => ranked.push({ post, rank }));
+  }
+
+  // Same rank -> fall back to usefulness so the stronger source leads each round.
+  ranked.sort((a, b) => a.rank - b.rank || b.post.usefulness - a.post.usefulness);
+  return ranked.map(r => r.post);
+}
+
 export function filterAndGroup(posts, topicsConfig) {
   const topics = topicsConfig.topics || [];
   const maxPerTopic = topicsConfig.maxPostsPerTopic || 5;
@@ -115,9 +144,9 @@ export function filterAndGroup(posts, topicsConfig) {
   const groups = [];
   const usedIds = new Set();
   for (const topic of topics) {
-    const inTopic = enriched
-      .filter(p => p.topics.includes(topic.name))
-      .sort((a, b) => b.usefulness - a.usefulness);
+    const inTopic = interleaveBySource(
+      enriched.filter(p => p.topics.includes(topic.name))
+    );
 
     // Prefer to show each post under a single (best) topic to reduce repeats.
     const picked = [];
