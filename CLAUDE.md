@@ -109,6 +109,10 @@ r/vibecoding, r/singularity.
 
 Every collector's `collect(config)` returns objects of this shape:
 `{ source, id, title, url, permalink, score, numComments, subreddit, author, selftext, created }`.
+Optional: `metricsKnown` (boolean) — set to `false` when the source cannot report
+engagement (Reddit RSS). Ranking substitutes the median engagement of scored posts
+rather than treating the zeros as real, so unscored posts are not buried. When the
+field is absent it is inferred from `score`/`numComments`.
 Adding a new source = new file in `src/collectors/`, a section in
 `config/sources.json`, and one line in the `COLLECTORS` map in `src/index.js`.
 

@@ -101,11 +101,23 @@ The buzz step also runs inside `npm start` and is placed at the top of the daily
 digest. Disable it with `--skip-buzz`, `DIGEST_SKIP_BUZZ=true`, or
 `"enabled": false` in `config/buzz.json`.
 
-> **Reddit credentials matter here.** Without `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`
-> the collector falls back to anonymous RSS, which Reddit throttles to roughly one
-> request per 30s — a 7-subreddit run takes ~5 minutes and comment analysis is skipped.
-> With OAuth (free "script" app) the same run takes seconds and includes comment
-> sentiment. Subreddits that could not be reached are listed in the report.
+> **Reddit credentials are optional.** Without `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`
+> the collector uses anonymous RSS, which Reddit throttles to roughly one request per
+> 30s per IP. The pipeline handles this by pacing requests and waiting the throttle
+> out, so coverage is still complete — it just costs wall time (~5 min for the buzz
+> scan, ~5 min for the daily collect) and comment analysis is skipped, since anonymous
+> comment feeds are refused outright. With OAuth (free "script" app at
+> [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps)) the same runs take
+> seconds, post scores become available for ranking, and comment sentiment turns on.
+> Subreddits that could not be reached are listed in the report.
+
+#### Ranking without scores
+
+Anonymous RSS reports no score or comment count. Those posts are **not** ranked as if
+they had zero engagement — that would push every Reddit post below every Hacker News
+post before content is considered. Instead they inherit the median engagement of the
+posts that do report metrics, so they compete on content signal. See `popularityScore`
+in `src/filter.js`.
 
 ### X.com source
 
@@ -209,9 +221,9 @@ This repo includes a scheduled workflow at
 - `NOTION_ROOT_TITLE`
 - `NOTION_VERSION`
 - `REDDIT_USER_AGENT`
-- `REDDIT_DELAY_MS`
-- `REDDIT_RSS_RETRIES`
-- `REDDIT_RSS_MAX_429_SUBS`
+- `REDDIT_DELAY_MS` (default: `30000` without OAuth, `600` with)
+- `REDDIT_RSS_RETRIES` (default: `3`)
+- `REDDIT_RSS_MAX_429_SUBS` (default: `0` = never give up early)
 - `X_API_BASE`
 - `X_PLAYWRIGHT_COMMAND`
 - `X_PLAYWRIGHT_TIMEOUT_MS`

@@ -51,3 +51,104 @@ test('X fixture posts flow through filterAndGroup into topics', async () => {
     `expected known topics, got: ${topicNames.join(', ')}`
   );
 });
+
+/**
+ * Reddit's public RSS feed reports no score or comment count, so those posts
+ * arrive with zeros. Ranking must treat that as "unknown", not "unpopular",
+ * otherwise sources with real metrics (Hacker News) win every slot.
+ */
+test('posts without engagement metrics are not buried under scored posts', () => {
+  const topicsConfig = {
+    maxPostsPerTopic: 5,
+    topics: [{ name: 'AI Coding Tools', keywords: ['claude code'] }]
+  };
+
+  const redditPost = {
+    source: 'reddit',
+    id: 'reddit:1',
+    title: 'I built a Claude Code workflow that reviews my PRs',
+    url: 'https://reddit.com/1',
+    permalink: 'https://reddit.com/1',
+    score: 0,
+    numComments: 0,
+    metricsKnown: false,
+    origin: 'r/ClaudeCode',
+    author: 'a',
+    selftext: '',
+    created: 0
+  };
+  // A deliberately weak HN post: it clears the point floor but says nothing useful.
+  const hnPost = {
+    source: 'hackernews',
+    id: 'hn:1',
+    title: 'Claude Code discussion thread',
+    url: 'https://news.ycombinator.com/1',
+    permalink: 'https://news.ycombinator.com/1',
+    score: 40,
+    numComments: 20,
+    metricsKnown: true,
+    origin: 'Hacker News',
+    author: 'b',
+    selftext: '',
+    created: 0
+  };
+
+  const groups = filterAndGroup([redditPost, hnPost], topicsConfig);
+  const picked = groups[0].posts;
+  assert.equal(picked.length, 2, 'both posts match the topic');
+  assert.equal(
+    picked[0].source,
+    'reddit',
+    'the unscored post wins on content ("i built") instead of losing on missing metrics'
+  );
+
+  // The median stand-in must be derived from the scored posts, not hardcoded.
+  assert.ok(
+    picked.find(p => p.source === 'reddit').usefulness > 0,
+    'unscored posts get a real popularity baseline'
+  );
+});
+
+test('an unscored post still loses to a genuinely popular one', () => {
+  const topicsConfig = {
+    maxPostsPerTopic: 20,
+    topics: [{ name: 'AI Coding Tools', keywords: ['claude code'] }]
+  };
+
+  const base = {
+    url: 'https://x/1', permalink: 'https://x/1', author: 'a', selftext: '', created: 0
+  };
+  // A realistic spread of scored posts, so the median stand-in sits mid-pack.
+  const scored = [30, 45, 60, 80, 120, 200, 350, 900, 4000].map((score, i) => ({
+    ...base,
+    source: 'hackernews',
+    id: `h${i}`,
+    title: 'Claude Code question',
+    score,
+    numComments: Math.round(score / 4),
+    metricsKnown: true,
+    origin: 'Hacker News'
+  }));
+  const unscored = {
+    ...base,
+    source: 'reddit',
+    id: 'r1',
+    title: 'Claude Code question',
+    score: 0,
+    numComments: 0,
+    metricsKnown: false,
+    origin: 'r/ClaudeCode'
+  };
+
+  const picked = filterAndGroup([unscored, ...scored], topicsConfig)[0].posts;
+  const rankOf = id => picked.findIndex(p => p.id === id);
+
+  assert.ok(
+    rankOf('h8') < rankOf('r1'),
+    'the 4000-point post outranks the unknown-metrics baseline'
+  );
+  assert.ok(
+    rankOf('r1') < rankOf('h0'),
+    'the baseline still outranks the weakest scored post, instead of sinking below all of them'
+  );
+});

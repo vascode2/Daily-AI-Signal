@@ -36,14 +36,40 @@ function matchTopics(post, topics) {
 }
 
 /**
+ * Engagement + discussion signal, or `null` when the source cannot report it.
+ *
+ * Reddit's public RSS feed omits scores and comment counts entirely (they arrive
+ * as 0). Treating those zeros as real would rank every RSS post below every
+ * Hacker News post before content is even considered, because HN posts clear a
+ * 30-point floor and bank ~25-40 points here.
+ */
+function popularityScore(post) {
+  const known = post.metricsKnown ?? (post.score > 0 || post.numComments > 0);
+  if (!known) return null;
+  return (
+    Math.log10(Math.max(post.score, 1)) * 10 + Math.log10(Math.max(post.numComments, 1)) * 6
+  );
+}
+
+function median(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/**
  * Heuristic usefulness score combining engagement, discussion depth,
  * practical signal, and a noise penalty. Higher is better.
+ *
+ * @param {object} post
+ * @param {number} unknownPopularity - stand-in used when the source reports no
+ *   engagement data, so such posts compete on content instead of being zeroed.
  */
-function usefulnessScore(post) {
+function usefulnessScore(post, unknownPopularity = 0) {
   const text = `${post.title} ${post.selftext}`.toLowerCase();
 
-  const engagement = Math.log10(Math.max(post.score, 1)) * 10;
-  const discussion = Math.log10(Math.max(post.numComments, 1)) * 6;
+  const popularity = popularityScore(post) ?? unknownPopularity;
   const hasBody = post.selftext.length > 200 ? 4 : 0;
 
   const practical = PRACTICAL_HINTS.reduce(
@@ -55,7 +81,7 @@ function usefulnessScore(post) {
     0
   );
 
-  return Math.round(engagement + discussion + hasBody + practical + noise);
+  return Math.round(popularity + hasBody + practical + noise);
 }
 
 /**
@@ -67,6 +93,12 @@ export function filterAndGroup(posts, topicsConfig) {
   const topics = topicsConfig.topics || [];
   const maxPerTopic = topicsConfig.maxPostsPerTopic || 5;
 
+  // Posts from sources that report no engagement (Reddit RSS) are scored against
+  // the median of the posts that do, so they neither dominate nor get buried.
+  const unknownPopularity = median(
+    posts.map(popularityScore).filter(v => v !== null)
+  );
+
   // Attach topic matches + score; drop non-matching (noise) posts.
   const enriched = [];
   for (const post of posts) {
@@ -75,7 +107,7 @@ export function filterAndGroup(posts, topicsConfig) {
     enriched.push({
       ...post,
       topics: matched,
-      usefulness: usefulnessScore(post)
+      usefulness: usefulnessScore(post, unknownPopularity)
     });
   }
 

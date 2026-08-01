@@ -82,6 +82,7 @@ async function fetchSubredditOAuth(subreddit, { sort, timeWindow, limit }) {
         permalink: `https://www.reddit.com${d.permalink}`,
         score: d.score || 0,
         numComments: d.num_comments || 0,
+        metricsKnown: true,
         subreddit: d.subreddit || subreddit,
         origin: `r/${d.subreddit || subreddit}`,
         author: d.author || 'unknown',
@@ -133,6 +134,10 @@ function parseAtom(xml, subreddit) {
       permalink,
       score: 0, // unknown via RSS
       numComments: 0, // unknown via RSS
+      // RSS cannot report engagement at all. Ranking must not read these zeros
+      // as "nobody engaged", or these posts lose every comparison with sources
+      // that do report scores (see popularityScore in filter.js).
+      metricsKnown: false,
       subreddit,
       origin: `r/${subreddit}`,
       author,
@@ -148,8 +153,10 @@ async function fetchSubredditRss(subreddit, { sort, timeWindow, limit, retries, 
   const url = `https://www.reddit.com/r/${subreddit}/${sort}/.rss?${params}`;
 
   // Reddit rate-limits anonymous RSS; retry a few times with backoff on 429/5xx.
-  const maxAttempts = retries || Number(process.env.REDDIT_RSS_RETRIES || 2);
-  const baseBackoff = backoffMs || 3000;
+  // The backoff has to match the real throttle window (~30s) — a 3s retry just
+  // burns an attempt and comes back 429.
+  const maxAttempts = retries || Number(process.env.REDDIT_RSS_RETRIES || 3);
+  const baseBackoff = backoffMs || 30000;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const res = await fetch(url, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'application/atom+xml' },
@@ -289,15 +296,20 @@ export async function collect(config) {
   console.log(`[${SOURCE}] mode: ${useOAuth ? 'OAuth (JSON)' : 'RSS (no auth, limited data)'}`);
 
   // Space anonymous RSS requests out (with jitter) to avoid Reddit rate limits.
+  // Measured behaviour: anonymous RSS allows roughly one request per ~30s per IP,
+  // so a short gap gets ~1-2 subreddits before Reddit starts returning 429 for the
+  // rest of the run. Being patient is what buys full coverage; OAuth (100 req/min)
+  // needs none of this.
   const gapMs =
     delayMs ??
     (useOAuth
       ? Number(process.env.REDDIT_DELAY_MS || 600)
-      : Number(process.env.REDDIT_DELAY_MS || 2500));
-  // 0 (or a negative value) means "never stop early" — used by the research mode,
-  // where breadth across subreddits matters more than a short runtime.
+      : Number(process.env.REDDIT_DELAY_MS || 30000));
+  // 0 (or a negative value) means "never stop early". Anonymous RSS 429s are a
+  // pacing signal rather than a hard failure, so stopping early just guarantees
+  // partial coverage; wait the throttle out instead.
   const max429SubredditFailures =
-    max429Failures ?? Number(process.env.REDDIT_RSS_MAX_429_SUBS || 3);
+    max429Failures ?? Number(process.env.REDDIT_RSS_MAX_429_SUBS || 0);
 
   // In RSS mode Reddit hard-throttles by IP, so only a few subreddits get through
   // per run. Shuffle the order so coverage rotates across daily runs instead of

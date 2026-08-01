@@ -16,7 +16,9 @@ concurrency:
 jobs:
   run-digest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Anonymous Reddit RSS is paced at ~30s/request, so the collect and buzz
+    # steps spend most of their wall time deliberately waiting out throttling.
+    timeout-minutes: 45
 
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -81,9 +83,12 @@ jobs:
             echo "DIGEST_SKIP_NOTION=${DIGEST_SKIP_NOTION:-false}"
 
             echo "REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-daily-ai-signal/0.1 by u/yourusername}"
-            echo "REDDIT_DELAY_MS=${REDDIT_DELAY_MS:-2500}"
-            echo "REDDIT_RSS_RETRIES=${REDDIT_RSS_RETRIES:-2}"
-            echo "REDDIT_RSS_MAX_429_SUBS=${REDDIT_RSS_MAX_429_SUBS:-3}"
+            # Anonymous RSS allows ~1 request per ~30s per IP. Without OAuth the
+            # only way to cover every subreddit is to pace requests and wait out
+            # the 429s rather than giving up early.
+            echo "REDDIT_DELAY_MS=${REDDIT_DELAY_MS:-30000}"
+            echo "REDDIT_RSS_RETRIES=${REDDIT_RSS_RETRIES:-3}"
+            echo "REDDIT_RSS_MAX_429_SUBS=${REDDIT_RSS_MAX_429_SUBS:-0}"
 
             echo "X_API_BASE=${X_API_BASE:-https://api.twitter.com/2}"
             echo "X_PLAYWRIGHT_TIMEOUT_MS=${X_PLAYWRIGHT_TIMEOUT_MS:-120000}"
