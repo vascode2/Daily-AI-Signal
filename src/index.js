@@ -5,13 +5,12 @@
  *   1. Collect posts from every enabled source (Reddit for the MVP).
  *   2. Filter to relevant topics, rank by usefulness, group by topic.
  *   3. Summarize each group with Gemini.
- *   4. Research short-window "AI buzz" (what people are talking about right now).
+ *   4. Check Artificial Analysis for newly published articles.
  *   5. Render a Markdown digest and save it to output/.
  *   6. Publish the digest to Notion (unless skipped).
  *
  * Run: `npm start`            (full pipeline)
  *      `npm run collect`      (skip Notion, local Markdown only)
- *      `npm run buzz`         (buzz research only, standalone report)
  */
 
 import 'dotenv/config';
@@ -23,10 +22,10 @@ import * as reddit from './collectors/reddit.js';
 import * as hackernews from './collectors/hackernews.js';
 import * as x from './collectors/x.js';
 import { filterAndGroup } from './filter.js';
-import { summarizeGroups, summarizeBuzz } from './summarize.js';
-import { buildDigest, buildBuzzSection, saveDigest, digestDate } from './render-markdown.js';
+import { summarizeGroups, summarizeArticles } from './summarize.js';
+import { buildDigest, buildArticlesSection, saveDigest, digestDate } from './render-markdown.js';
 import { publishDigest } from './notion.js';
-import { runBuzz } from './research/buzz.js';
+import { findNewArticles } from './monitors/artificial-analysis.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -45,13 +44,14 @@ function truthy(v) {
 async function main() {
   const skipNotion =
     process.argv.includes('--skip-notion') || truthy(process.env.DIGEST_SKIP_NOTION);
-  const skipBuzz = process.argv.includes('--skip-buzz') || truthy(process.env.DIGEST_SKIP_BUZZ);
+  const skipArticles =
+    process.argv.includes('--skip-articles') || truthy(process.env.DIGEST_SKIP_ARTICLES);
   const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
   const isKorean = lang.startsWith('ko');
 
   const sources = await loadJson('config/sources.json');
   const topicsConfig = await loadJson('config/topics.json');
-  const buzzConfig = await loadJson('config/buzz.json');
+  const articlesConfig = await loadJson('config/articles.json');
   const date = digestDate();
 
   console.log(`\n=== ${isKorean ? '데일리 AI 시그널' : 'Daily AI Signal'} — ${date} ===\n`);
@@ -79,21 +79,21 @@ async function main() {
   console.log('[3/6] Summarizing with Gemini...');
   const sections = await summarizeGroups(groups);
 
-  // 4. Short-window buzz research (which AI is being talked about right now).
-  let buzzBlock = '';
-  const buzzHours = Number(process.env.BUZZ_HOURS_BACK) || buzzConfig.hoursBack || 4;
-  const buzzTopN = Number(process.env.BUZZ_TOP_N) || buzzConfig.topN || 3;
-  if (skipBuzz || !buzzConfig.enabled) {
-    console.log('[4/6] Skipping buzz research (disabled or --skip-buzz).');
+  // 4. Check Artificial Analysis for newly published articles.
+  let articlesBlock = '';
+  const lookbackDays =
+    Number(process.env.ARTICLES_LOOKBACK_DAYS) || articlesConfig.lookbackDays || 1;
+  if (skipArticles || !articlesConfig.enabled) {
+    console.log('[4/6] Skipping article monitor (disabled or --skip-articles).');
   } else {
-    console.log(`[4/6] Researching AI buzz (last ${buzzHours}h)...`);
+    console.log(`[4/6] Checking ${articlesConfig.name} for new articles (last ${lookbackDays}d)...`);
     try {
-      const result = await runBuzz(buzzConfig, { hoursBack: buzzHours, topN: buzzTopN });
-      const buzzSection = await summarizeBuzz(result);
-      buzzBlock = buildBuzzSection({ result, section: buzzSection });
+      const result = await findNewArticles({ ...articlesConfig, lookbackDays });
+      const section = await summarizeArticles(result.articles);
+      articlesBlock = buildArticlesSection({ result, section });
     } catch (err) {
-      // Research is a bonus section — never let it break the daily digest.
-      console.error(`[buzz] failed: ${err.message}`);
+      // A monitored site going down must never break the daily digest.
+      console.error(`[articles] failed: ${err.message}`);
     }
   }
 
@@ -112,7 +112,7 @@ async function main() {
   const markdown = buildDigest({
     date,
     sections,
-    buzz: buzzBlock,
+    lead: articlesBlock,
     stats: { collected: collected.length, kept: keptCount, topics: groups.length, originCounts }
   });
   await saveDigest(markdown, date, ROOT);

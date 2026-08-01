@@ -13,8 +13,8 @@ same Gemini + Notion conventions.
 1. **Collect** — pulls top posts from configured subreddits (Reddit public JSON API, no auth).
 2. **Filter & rank** — matches posts to your AI topics, drops noise, scores usefulness.
 3. **Summarize** — Gemini writes a concise, per-topic Markdown section.
-4. **Research (AI Buzz)** — scans AI subreddits for the **last 4 hours**, ranks which AI
-   models/tools people are actually talking about, scores the mood, and explains why.
+4. **Monitor** — checks [Artificial Analysis](https://artificialanalysis.ai/articles) for
+   newly published articles and summarizes what changed.
 5. **Render** — assembles a dated Markdown digest, grouped by topic.
 6. **Publish** — saves `output/<date>.md` and creates a Notion child page (newest on top).
 
@@ -48,65 +48,50 @@ into `NOTION_PAGE_ID`.
 ### Run
 
 ```bash
-npm start          # full pipeline: collect → summarize → buzz research → save → publish
+npm start          # full pipeline: collect → summarize → check articles → save → publish
 npm run collect    # same, but skip Notion (writes local Markdown only)
-npm run buzz       # AI Buzz research only (standalone report, no digest)
 npm test           # run the unit + integration tests (node:test, no deps)
 npm run e2e:x      # end-to-end smoke test of the X source (fixture → Gemini → Markdown)
 ```
 
-## 🔥 AI Buzz research (sentiment)
+## 📊 Artificial Analysis monitor
 
-Answers one question: **which AI is everyone talking about right now, and why?**
-
-It scans `r/codex`, `r/OpenAI`, `r/ChatGPT`, `r/ClaudeAI`, `r/ClaudeCode`, `r/vibecoding`,
-and `r/singularity` for posts from the last 4 hours, counts mentions of ~35 known
-models/tools, scores the mood, and asks Gemini to explain the top 3.
-
-```bash
-npm run buzz                      # last 4h, top 3, saves output/research/<date>-<HHMM>-buzz.md
-node scripts/buzz.js --hours=8    # widen the window
-node scripts/buzz.js --top=5      # more entities
-node scripts/buzz.js --json       # raw analysis, no Gemini call
-node scripts/buzz.js --notion     # also publish the report to Notion
-```
-
-Sample output:
+Watches [artificialanalysis.ai/articles](https://artificialanalysis.ai/articles) — an
+independent AI benchmarking site — and summarizes anything newly published. The result
+is its own section at the top of the daily digest.
 
 ```markdown
-## 🔥 AI Buzz — last 4h
+## 📊 Artificial Analysis — New Articles
 
-> 92 posts analyzed across 7 subreddits
-> r/ChatGPT · r/ClaudeCode · r/codex · r/ClaudeAI · r/singularity · r/vibecoding · r/OpenAI
+> 2 new articles · 2026-07-30 → 2026-07-31
 
-1. **Claude** — 60 mentions · 5 subreddits · mostly positive (+9)
-   - **Why:** ...
-   - **Mood:** ...
-   - **Evidence:** [post](...) · [post](...)
+- **[DeepSeek V4 Flash 0731 scores 50 on the Intelligence Index](...)** — 10 points
+  above the previous DeepSeek V4 Flash, now matching ...
+  - **Why it matters:** open-weights models close the gap on ...
 ```
 
-How the ranking works (all deterministic — Gemini only writes the explanation):
+When nothing was published the section says so explicitly rather than disappearing, so
+a silent section can be told apart from a broken monitor.
 
-| Signal | Effect |
-| --- | --- |
-| Title mention | ×3 weight (capped at 2 per post) |
-| Body mention | ×1 weight (capped at 3 per post) |
-| Comment mention | ×1 weight (capped at 8 per post) |
-| Upvotes / comment count | logarithmic multiplier |
-| Recency inside the window | newer posts weigh more |
-| Cross-subreddit spread | +4 per extra subreddit |
-| Sentiment | AI-slang lexicon ("nerfed", "rate limit", "one-shot", …) with negation handling |
+**How "new" is decided.** The site has no RSS feed, so the monitor reads the article
+index for slugs and each article's OpenGraph tags for title, summary, and
+`article:published_time`. Since CI runners keep no state between runs, "new" is a date
+window: `lookbackDays: 1` (the default) means *published yesterday or today*, which
+reports each article exactly once for a once-a-day schedule. Widen it with
+`ARTICLES_LOOKBACK_DAYS` if a scheduled run is ever missed.
 
-The buzz step also runs inside `npm start` and is placed at the top of the daily
-digest. Disable it with `--skip-buzz`, `DIGEST_SKIP_BUZZ=true`, or
-`"enabled": false` in `config/buzz.json`.
+Tunables live in `config/articles.json`. Disable with `--skip-articles`,
+`DIGEST_SKIP_ARTICLES=true`, or `"enabled": false`.
+
+> Publish dates on the site have day granularity (no clock time), so the window is
+> measured in days rather than hours. A failed monitor never breaks the digest — the
+> step is wrapped and the rest of the pipeline continues.
 
 > **Reddit credentials are optional.** Without `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`
 > the collector uses anonymous RSS, which Reddit throttles to roughly one request per
 > 30s per IP. The pipeline handles this by pacing requests and waiting the throttle
-> out, so coverage is still complete — it just costs wall time (~5 min for the buzz
-> scan, ~5 min for the daily collect) and comment analysis is skipped, since anonymous
-> comment feeds are refused outright. With OAuth (free "script" app at
+> out, so coverage is still complete — it just costs wall time (~5 min for the daily
+> collect). With OAuth (free "script" app at
 > [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps)) the same runs take
 > seconds, post scores become available for ranking, and comment sentiment turns on.
 > Subreddits that could not be reached are listed in the report.
@@ -230,14 +215,11 @@ This repo includes a scheduled workflow at
 - `XAI_API_BASE`
 - `XAI_MODEL`
 - `XAI_REQUEST_TIMEOUT_MS`
-- `BUZZ_HOURS_BACK` (default: `4`)
-- `BUZZ_TOP_N` (default: `3`)
-- `BUZZ_RSS_DELAY_MS` (default: `30000`, only used without Reddit OAuth)
-- `DIGEST_SKIP_BUZZ` (default: `false`)
+- `ARTICLES_LOOKBACK_DAYS` (default: `1`)
+- `DIGEST_SKIP_ARTICLES` (default: `false`)
 
-If Reddit OAuth secrets are not provided, the workflow still runs with Reddit RSS
-best-effort collection plus Hacker News. The AI Buzz step is much slower and skips
-comment sentiment in that mode.
+If Reddit OAuth secrets are not provided, the workflow still runs — it just paces the
+RSS requests, which makes the collect step take a few minutes instead of seconds.
 
 X is scaffolded in plugin form. To collect X posts, set
 `config/sources.json -> x.enabled = true`, then choose a mode:
@@ -252,8 +234,8 @@ X is scaffolded in plugin form. To collect X posts, set
 - `config/sources.json` — subreddits, sort (`top`/`hot`/`new`), time window, per-sub limit, min score.
 - `config/sources.json` — source settings for Reddit, Hacker News, and future X collection.
 - `config/topics.json` — topics, their matching keywords, and max posts per topic.
-- `config/buzz.json` — AI Buzz research: subreddits, time window, scoring weights, and the
-  entity registry (model/tool names + aliases) used for mention counting.
+- `config/articles.json` — Artificial Analysis monitor: base URL, lookback window, and
+  how many article pages to check per run.
 
 All secrets and tunables live in `.env` (see `.env.example`).
 
@@ -263,15 +245,14 @@ All secrets and tunables live in `.env` (see `.env.example`).
 config/
   sources.json          # source configuration (Reddit today)
   topics.json           # topics + keywords for filtering/grouping
-  buzz.json             # AI Buzz research config + entity registry
+  articles.json         # Artificial Analysis monitor config
 src/
   collectors/
     reddit.js           # Reddit collector (implements the collect() contract)
     hackernews.js       # Hacker News collector (official Firebase API)
     x.js                # X.com collector (api | playwright plugin scaffold)
-  research/
-    buzz.js             # short-window mention ranking (who is being talked about)
-    sentiment.js        # AI-slang sentiment lexicon (deterministic, offline)
+  monitors/
+    artificial-analysis.js  # watches artificialanalysis.ai/articles for new posts
   filter.js             # relevance filter, ranking, topic grouping
   summarize.js          # Gemini summarization (raw HTTP + model fallback)
   render-markdown.js    # builds and saves the Markdown digest
@@ -279,9 +260,7 @@ src/
   index.js              # pipeline orchestrator
 scripts/
   setup-notion.js       # one-time: create the Daily AI Signal parent page
-  buzz.js               # standalone AI Buzz research run
 output/                 # generated digests: <date>.md
-  research/             # standalone buzz reports: <date>-<HHMM>-buzz.md
 ```
 
 ## Adding a new source (X, GitHub, RSS, ...)
@@ -298,9 +277,9 @@ all operate on the normalized post shape.
 
 - [x] Reddit collection (MVP)
 - [x] Gemini summarization + Notion publishing
-- [x] AI Buzz sentiment research (4h window across AI subreddits)
+- [x] Artificial Analysis article monitor
 - [ ] LLM-based relevance scoring (replace keyword matching)
-- [ ] Buzz trend tracking across runs (who is rising / falling)
+- [ ] More monitored publications (blogs, changelogs, release notes)
 - [ ] X.com / GitHub trending / RSS / newsletter sources
 - [ ] Scheduled daily run (GitHub Actions / cron)
 - [ ] Email / webhook / Slack delivery

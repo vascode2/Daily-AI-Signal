@@ -144,115 +144,6 @@ function fallbackSection(posts) {
 }
 
 /**
- * Build the prompt that explains *why* the top entities are being discussed.
- * The numbers (mentions, sentiment, spread) are computed deterministically in
- * src/research/buzz.js — Gemini only writes the explanation around them.
- */
-function buildBuzzPrompt(result) {
-  const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
-  const isKorean = lang.startsWith('ko');
-
-  const blocks = result.top
-    .map((e, i) => {
-      const evidence = e.evidence
-        .map(
-          ev =>
-            `     - "${ev.title}" (${ev.origin}, ${ev.score} points, ${ev.numComments} comments) ${ev.permalink}`
-        )
-        .join('\n');
-      const quotes = e.quotes.length
-        ? `\n   Representative comments:\n${e.quotes.map(q => `     - "${q}"`).join('\n')}`
-        : '';
-      const cues = [
-        e.sentiment.positives.length ? `positive cues: ${e.sentiment.positives.join(', ')}` : '',
-        e.sentiment.negatives.length ? `negative cues: ${e.sentiment.negatives.join(', ')}` : ''
-      ]
-        .filter(Boolean)
-        .join(' | ');
-
-      return `${i + 1}. ${e.name}${e.vendor ? ` (${e.vendor})` : ''}
-   Mentions: ${e.mentions} across ${e.postCount} posts in ${e.subreddits.length} subreddits (${e.subreddits
-     .map(s => `r/${s}`)
-     .join(', ')})
-   Buzz score: ${e.buzzScore} | Sentiment: ${e.sentiment.summary}${cues ? ` | ${cues}` : ''}
-   Top posts:
-${evidence}${quotes}`;
-    })
-    .join('\n\n');
-
-  return `You are an AI-trend analyst. Below is measured Reddit chatter from the last ${result.hoursBack} hours across ${result.subreddits
-    .map(s => `r/${s}`)
-    .join(', ')} (${result.totalPosts} posts analyzed).
-
-Explain WHY each of these ${result.top.length} AI tools/models is being talked about right now.
-
-Rules:
-- Output ONLY a Markdown ordered list, one item per entity, in this exact shape:
-  1. **<entity name>** — <mentions> mentions · <N> subreddits · <sentiment summary>
-     - **Why:** 1-2 sentences on the concrete reason it is being discussed right now (a release, a regression, pricing, a comparison, a workflow people found). Base this strictly on the evidence below.
-     - **Mood:** one short sentence on how people feel and what specifically drives that feeling.
-     - **Evidence:** [<short post title>](<link>) · [<short post title>](<link>)
-- Use the exact numbers given. Do not invent facts, versions, or events not supported by the evidence.
-- If the evidence is thin, say what the chatter suggests and keep it short. Never pad.
-- No headings, no preamble, no emojis.
-- Output language: ${isKorean ? 'Korean (한국어)' : 'English'}.
-
-Data:
-${blocks}`;
-}
-
-function fallbackBuzzSection(result) {
-  const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
-  const isKorean = lang.startsWith('ko');
-
-  return result.top
-    .map((e, i) => {
-      const subs = e.subreddits.map(s => `r/${s}`).join(', ');
-      const evidence = e.evidence
-        .slice(0, 2)
-        .map(ev => `[${ev.title}](${ev.permalink})`)
-        .join(' · ');
-      const head = isKorean
-        ? `${i + 1}. **${e.name}** — 언급 ${e.mentions}회 · ${e.subreddits.length}개 서브레딧 · ${e.sentiment.summary}`
-        : `${i + 1}. **${e.name}** — ${e.mentions} mentions · ${e.subreddits.length} subreddits · ${e.sentiment.summary}`;
-      const where = isKorean ? `   - **어디서:** ${subs}` : `   - **Where:** ${subs}`;
-      const ev = evidence
-        ? isKorean
-          ? `   - **근거:** ${evidence}`
-          : `   - **Evidence:** ${evidence}`
-        : '';
-      return [head, where, ev].filter(Boolean).join('\n');
-    })
-    .join('\n');
-}
-
-/**
- * Summarize the buzz research result into a Markdown list of the top entities.
- * @param {object} result - output of src/research/buzz.js runBuzz()
- * @returns {Promise<string>} markdown (no heading)
- */
-export async function summarizeBuzz(result) {
-  if (!result?.top?.length) return '';
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  const timeoutMs = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 120000);
-
-  if (!apiKey) {
-    console.warn('[summarize] GEMINI_API_KEY not set; using non-AI buzz section.');
-    return fallbackBuzzSection(result);
-  }
-
-  try {
-    const text = await generateWithFallback(buildBuzzPrompt(result), apiKey, timeoutMs);
-    console.log('[summarize] buzz: done.');
-    return normalizeMarkdownLinks(text || fallbackBuzzSection(result));
-  } catch (err) {
-    console.error(`[summarize] buzz failed: ${err.message}`);
-    return fallbackBuzzSection(result);
-  }
-}
-
-/**
  * @param {Array<{topic, posts}>} groups
  * @returns {Promise<Array<{topic, section}>>} markdown section per topic
  */
@@ -286,4 +177,81 @@ export async function summarizeGroups(groups) {
     await new Promise(r => setTimeout(r, delayMs));
   }
   return results;
+}
+
+/**
+ * Prompt for the Artificial Analysis articles section.
+ *
+ * Each article already ships an editorial summary (`og:description`); the body
+ * text is a best-effort bonus. Gemini's job is to say what changed and why it
+ * matters, not to restate the headline.
+ */
+function buildArticlesPrompt(articles) {
+  const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
+  const isKorean = lang.startsWith('ko');
+
+  const blocks = articles
+    .map((a, i) => {
+      const body = a.body ? `\n   Article text: ${a.body.slice(0, 2000)}` : '';
+      return `${i + 1}. ${a.title}
+   Published: ${a.published}
+   Link: ${a.url}
+   Summary: ${a.description || '(none provided)'}${body}`;
+    })
+    .join('\n\n');
+
+  return `You are an AI-industry analyst. Artificial Analysis (an independent AI
+benchmarking site) published the following ${articles.length} article(s).
+
+Write a short briefing for an engineer who follows model releases and benchmarks.
+
+Rules:
+- Output ONLY a Markdown list, one item per article, in this exact shape:
+  - **[<article title>](<link>)** — <1-2 sentences: what is new and the concrete
+    numbers or findings that matter>
+    - **Why it matters:** <one sentence on the practical implication>
+- Keep the article titles and links exactly as given.
+- Use only facts present below. Never invent benchmark scores, prices, or dates.
+- Prefer concrete figures (index scores, cost, speed) over adjectives.
+- No headings, no preamble, no emojis.
+- Output language: ${isKorean ? 'Korean (한국어)' : 'English'}.
+
+Articles:
+${blocks}`;
+}
+
+/** Non-AI fallback: the site's own summaries, linked. */
+function fallbackArticlesSection(articles) {
+  return articles
+    .map(a => {
+      const desc = a.description ? ` — ${a.description}` : '';
+      return `- **[${a.title}](${a.url})**${desc}`;
+    })
+    .join('\n');
+}
+
+/**
+ * Summarize newly published Artificial Analysis articles.
+ * @param {Array} articles - records from src/monitors/artificial-analysis.js
+ * @returns {Promise<string>} markdown list (no heading), '' when nothing is new
+ */
+export async function summarizeArticles(articles) {
+  if (!articles?.length) return '';
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  const timeoutMs = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 120000);
+
+  if (!apiKey) {
+    console.warn('[summarize] GEMINI_API_KEY not set; using non-AI articles section.');
+    return fallbackArticlesSection(articles);
+  }
+
+  try {
+    const text = await generateWithFallback(buildArticlesPrompt(articles), apiKey, timeoutMs);
+    console.log('[summarize] articles: done.');
+    return normalizeMarkdownLinks(text || fallbackArticlesSection(articles));
+  } catch (err) {
+    console.error(`[summarize] articles failed: ${err.message}`);
+    return fallbackArticlesSection(articles);
+  }
 }

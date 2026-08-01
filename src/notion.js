@@ -186,7 +186,7 @@ function listItemBlock(trimmed) {
       bulleted_list_item: { rich_text: parseRichText(trimmed.slice(2)) }
     };
   }
-  // Ordered lists (used by the AI Buzz ranking: "1. **Claude** — ...").
+  // Ordered lists (e.g. a ranked briefing: "1. **Model X** — ...").
   const ordered = trimmed.match(/^\d{1,3}\.\s+(.*)$/);
   if (ordered) {
     return {

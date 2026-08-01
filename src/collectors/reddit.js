@@ -179,94 +179,8 @@ async function fetchSubredditRss(subreddit, { sort, timeWindow, limit, retries, 
 }
 
 /** True when Reddit OAuth credentials are configured (richer data, no throttling). */
-export function hasOAuth() {
+function hasOAuth() {
   return Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET);
-}
-
-// ── Comments (used by the buzz/sentiment research mode) ──────────
-
-/** Turn any post permalink into the `/r/<sub>/comments/<id>/...` path. */
-function commentPath(permalink) {
-  try {
-    return new URL(permalink).pathname.replace(/\/+$/, '');
-  } catch {
-    return String(permalink || '').replace(/^https?:\/\/[^/]+/, '').replace(/\/+$/, '');
-  }
-}
-
-/**
- * Extract comment bodies from Reddit's `[postListing, commentListing]` JSON.
- * Exported for testing — the OAuth comment path cannot run without credentials.
- */
-export function parseCommentListing(json, limit = 25) {
-  const listing = Array.isArray(json) ? json[1] : json;
-  const out = [];
-  const walk = children => {
-    for (const c of children || []) {
-      if (out.length >= limit) return;
-      if (c?.kind !== 't1' || !c.data) continue;
-      const body = (c.data.body || '').trim();
-      if (body && body !== '[deleted]' && body !== '[removed]') {
-        out.push({ body: body.slice(0, 1200), score: c.data.score || 0 });
-      }
-      if (c.data.replies?.data?.children) walk(c.data.replies.data.children);
-    }
-  };
-  walk(listing?.data?.children);
-  return out.slice(0, limit);
-}
-
-async function fetchCommentsOAuth(path, limit) {
-  const token = await getAccessToken();
-  const url = `https://oauth.reddit.com${path}?limit=${limit}&sort=top&depth=2`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, 'User-Agent': USER_AGENT },
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for comments ${path}`);
-
-  return parseCommentListing(await res.json(), limit);
-}
-
-async function fetchCommentsRss(path, limit) {
-  const url = `https://www.reddit.com${path}/.rss?limit=${limit}&sort=top`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': BROWSER_UA, Accept: 'application/atom+xml' },
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for comments ${path} (rss)`);
-
-  const xml = await res.text();
-  const entries = xml.match(/<entry>[\s\S]*?<\/entry>/g) || [];
-  // The first entry of a comment feed is the post itself; the rest are comments.
-  return entries
-    .slice(1)
-    .map(e => ({ body: stripHtml(tag(e, 'content')).slice(0, 1200), score: 0 }))
-    .filter(c => c.body)
-    .slice(0, limit);
-}
-
-/**
- * Fetch top-level-ish comments for a single post. Best-effort: returns [] on any
- * failure so callers never have to guard it.
- *
- * @param {string} permalink - full post permalink
- * @param {number} limit
- * @returns {Promise<Array<{body: string, score: number}>>}
- */
-export async function fetchComments(permalink, limit = 25) {
-  const path = commentPath(permalink);
-  if (!path.includes('/comments/')) return [];
-
-  const useOAuth = Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET);
-  try {
-    return useOAuth
-      ? await fetchCommentsOAuth(path, limit)
-      : await fetchCommentsRss(path, limit);
-  } catch (err) {
-    console.warn(`[${SOURCE}] comments failed for ${path}: ${err.message}`);
-    return [];
-  }
 }
 
 // ── Public collect() ─────────────────────────────────────────────
@@ -283,8 +197,8 @@ export async function collect(config) {
     timeWindow = 'day',
     limitPerSubreddit = 25,
     minScore = 0,
-    // Pacing overrides — the buzz research mode needs to be far more patient than
-    // the daily digest, because anonymous RSS only allows ~1 request per ~30s.
+    // Pacing overrides. Anonymous RSS only allows ~1 request per ~30s, so these
+    // let a caller trade runtime for coverage.
     delayMs,
     rssRetries,
     rssBackoffMs,

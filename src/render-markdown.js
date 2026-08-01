@@ -16,86 +16,68 @@ export function digestDate(timezone) {
   }).format(new Date());
 }
 
-/** Local time as HHMM in the configured timezone (used for research filenames). */
-export function digestTime(timezone) {
-  const tz = timezone || process.env.DIGEST_TIMEZONE || 'UTC';
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-    .format(new Date())
-    .replace(':', '');
-}
-
 /**
- * Build the "AI Buzz" research block: what people are talking about right now.
+ * Build the "Artificial Analysis" section: articles published since the last run.
  *
  * @param {object} opts
- * @param {object} opts.result - runBuzz() output
- * @param {string} opts.section - markdown list (from summarizeBuzz)
+ * @param {object} opts.result - findNewArticles() output
+ * @param {string} opts.section - markdown list (from summarizeArticles)
  * @param {boolean} [opts.includeHeading=true]
- * @returns {string} markdown (empty string when there is nothing to report)
+ * @returns {string} markdown ('' when the monitor produced nothing at all)
  */
-export function buildBuzzSection({ result, section, includeHeading = true }) {
+export function buildArticlesSection({ result, section, includeHeading = true }) {
   const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
   const isKorean = lang.startsWith('ko');
   if (!result) return '';
 
-  const subs = (result.subreddits || []).map(s => `r/${s}`).join(' · ');
   const lines = [];
+  const label = result.source || 'Artificial Analysis';
 
   if (includeHeading) {
-    lines.push(
-      isKorean
-        ? `## 🔥 AI 화제 — 최근 ${result.hoursBack}시간`
-        : `## 🔥 AI Buzz — last ${result.hoursBack}h`
-    );
+    lines.push(isKorean ? `## 📊 ${label} — 새 글` : `## 📊 ${label} — New Articles`);
     lines.push('');
   }
 
-  lines.push(
-    isKorean
-      ? `> 분석한 포스트 ${result.totalPosts}개 · 서브레딧 ${result.subreddits?.length || 0}개`
-      : `> ${result.totalPosts} posts analyzed across ${result.subreddits?.length || 0} subreddits`
-  );
-  if (subs) lines.push(`> ${subs}`);
-
-  // Anonymous Reddit access gets throttled, so be explicit when coverage is partial.
-  const failed = result.coverage?.failed || [];
-  if (failed.length > 0) {
-    const list = failed.map(s => `r/${s}`).join(', ');
+  // Silence is ambiguous (nothing new vs. monitor broken), so always say which.
+  if (!result.articles?.length) {
+    const days = result.lookbackDays ?? 1;
     lines.push(
       isKorean
-        ? `> ⚠️ 수집 실패(레이트 리밋): ${list}`
-        : `> ⚠️ Not reachable this run (rate-limited): ${list}`
-    );
-  }
-  lines.push('');
-
-  if (!section || !result.top?.length) {
-    lines.push(
-      isKorean
-        ? `_최근 ${result.hoursBack}시간 동안 뚜렷하게 화제가 된 AI가 없습니다._`
-        : `_No clear AI stood out in the last ${result.hoursBack}h._`
+        ? `_최근 ${days}일간 [새 글](${result.url})이 없습니다._`
+        : `_No new articles in the last ${days} day${days === 1 ? '' : 's'} ([index](${result.url}))._`
     );
     lines.push('');
     return lines.join('\n');
   }
 
-  lines.push(section.trim());
+  const dates = result.articles.map(a => a.published).filter(Boolean);
+  const range =
+    dates.length > 1 && dates.at(-1) !== dates[0]
+      ? `${dates.at(-1)} → ${dates[0]}`
+      : dates[0] || '';
+  lines.push(
+    isKorean
+      ? `> 새 글 ${result.articles.length}개${range ? ` · ${range}` : ''}`
+      : `> ${result.articles.length} new article${result.articles.length === 1 ? '' : 's'}${range ? ` · ${range}` : ''}`
+  );
+
+  if (result.failed?.length) {
+    lines.push(
+      isKorean
+        ? `> ⚠️ 확인 실패: ${result.failed.length}건`
+        : `> ⚠️ ${result.failed.length} article page(s) could not be read this run`
+    );
+  }
   lines.push('');
 
-  // "Also mentioned" tail: everything ranked below the top N.
-  const rest = (result.entities || []).slice(result.top.length, result.top.length + 6);
-  if (rest.length > 0) {
-    const tail = rest.map(e => `${e.name} (${e.mentions})`).join(' · ');
-    lines.push(isKorean ? `**그 외 언급:** ${tail}` : `**Also mentioned:** ${tail}`);
-    lines.push('');
-  }
+  lines.push((section || '').trim() || buildArticleFallbackList(result.articles));
+  lines.push('');
 
   return lines.join('\n');
+}
+
+function buildArticleFallbackList(articles) {
+  return articles.map(a => `- **[${a.title}](${a.url})**`).join('\n');
 }
 
 /**
@@ -104,10 +86,11 @@ export function buildBuzzSection({ result, section, includeHeading = true }) {
  * @param {string} opts.date - YYYY-MM-DD
  * @param {Array<{topic, section}>} opts.sections
  * @param {object} opts.stats - { collected, kept, topics }
- * @param {string} [opts.buzz] - optional rendered buzz block (placed near the top)
+ * @param {string} [opts.lead] - optional rendered block placed above the topics
+ *   (currently the Artificial Analysis articles section)
  * @returns {string} markdown
  */
-export function buildDigest({ date, sections, stats, buzz }) {
+export function buildDigest({ date, sections, stats, lead }) {
   const lang = (process.env.DIGEST_LANGUAGE || 'en').toLowerCase();
   const isKorean = lang.startsWith('ko');
   const lines = [];
@@ -132,8 +115,8 @@ export function buildDigest({ date, sections, stats, buzz }) {
   lines.push('---');
   lines.push('');
 
-  if (buzz) {
-    lines.push(buzz.trim());
+  if (lead) {
+    lines.push(lead.trim());
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -169,19 +152,6 @@ export async function saveDigest(markdown, date, baseDir) {
   const outputDir = join(baseDir, 'output');
   await mkdir(outputDir, { recursive: true });
   const filepath = join(outputDir, `${date}.md`);
-  await writeFile(filepath, markdown, 'utf-8');
-  console.log(`[output] saved ${filepath}`);
-  return filepath;
-}
-
-/**
- * Write a standalone research report to output/research/<date>-<HHMM>-<name>.md.
- * @returns {Promise<string>} absolute file path
- */
-export async function saveResearch(markdown, baseDir, name = 'buzz') {
-  const outputDir = join(baseDir, 'output', 'research');
-  await mkdir(outputDir, { recursive: true });
-  const filepath = join(outputDir, `${digestDate()}-${digestTime()}-${name}.md`);
   await writeFile(filepath, markdown, 'utf-8');
   console.log(`[output] saved ${filepath}`);
   return filepath;

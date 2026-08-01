@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Artificial Analysis",
+  "baseUrl": "https://artificialanalysis.ai",
+  "indexPath": "/articles",
+  "lookbackDays": 1,
+  "maxArticles": 5,
+  "maxDetailFetches": 12,
+  "delayMs": 800,
+  "retries": 3,
+  "backoffMs": 2000,
+  "timeoutMs": 25000
+}

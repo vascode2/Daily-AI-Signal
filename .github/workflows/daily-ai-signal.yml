@@ -16,9 +16,9 @@ concurrency:
 jobs:
   run-digest:
     runs-on: ubuntu-latest
-    # Anonymous Reddit RSS is paced at ~30s/request, so the collect and buzz
-    # steps spend most of their wall time deliberately waiting out throttling.
-    timeout-minutes: 45
+    # Anonymous Reddit RSS is paced at ~30s/request, so the collect step spends
+    # most of its wall time deliberately waiting out throttling.
+    timeout-minutes: 30
 
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -52,10 +52,8 @@ jobs:
       DIGEST_TIMEZONE: ${{ vars.DIGEST_TIMEZONE }}
       DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE }}
 
-      BUZZ_HOURS_BACK: ${{ vars.BUZZ_HOURS_BACK }}
-      BUZZ_TOP_N: ${{ vars.BUZZ_TOP_N }}
-      BUZZ_RSS_DELAY_MS: ${{ vars.BUZZ_RSS_DELAY_MS }}
-      DIGEST_SKIP_BUZZ: ${{ vars.DIGEST_SKIP_BUZZ }}
+      ARTICLES_LOOKBACK_DAYS: ${{ vars.ARTICLES_LOOKBACK_DAYS }}
+      DIGEST_SKIP_ARTICLES: ${{ vars.DIGEST_SKIP_ARTICLES }}
 
     steps:
       - name: Checkout
@@ -99,10 +97,8 @@ jobs:
             echo "DIGEST_TIMEZONE=${DIGEST_TIMEZONE:-America/New_York}"
             echo "DIGEST_LANGUAGE=${DIGEST_LANGUAGE:-en}"
 
-            echo "BUZZ_HOURS_BACK=${BUZZ_HOURS_BACK:-4}"
-            echo "BUZZ_TOP_N=${BUZZ_TOP_N:-3}"
-            echo "BUZZ_RSS_DELAY_MS=${BUZZ_RSS_DELAY_MS:-30000}"
-            echo "DIGEST_SKIP_BUZZ=${DIGEST_SKIP_BUZZ:-false}"
+            echo "ARTICLES_LOOKBACK_DAYS=${ARTICLES_LOOKBACK_DAYS:-1}"
+            echo "DIGEST_SKIP_ARTICLES=${DIGEST_SKIP_ARTICLES:-false}"
           } >> "$GITHUB_ENV"
 
       - name: Select the 03:30 ET cron for the current DST period
@@ -163,5 +159,4 @@ jobs:
           name: daily-ai-signal-output
           path: |
             output/*.md
-            output/research/*.md
           if-no-files-found: ignore
