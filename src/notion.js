@@ -214,6 +214,18 @@ export function markdownToNotionBlocks(md) {
       continue;
     }
 
+    // Ordered lists (used by the AI Buzz ranking: "1. **Claude** — ...").
+    const ordered = trimmed.match(/^\d{1,3}\.\s+(.*)$/);
+    if (ordered) {
+      blocks.push({
+        object: 'block',
+        type: 'numbered_list_item',
+        numbered_list_item: { rich_text: parseRichText(ordered[1]) }
+      });
+      i++;
+      continue;
+    }
+
     blocks.push({
       object: 'block',
       type: 'paragraph',

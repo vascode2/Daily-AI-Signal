@@ -50,6 +50,11 @@ jobs:
       DIGEST_TIMEZONE: ${{ vars.DIGEST_TIMEZONE }}
       DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE }}
 
+      BUZZ_HOURS_BACK: ${{ vars.BUZZ_HOURS_BACK }}
+      BUZZ_TOP_N: ${{ vars.BUZZ_TOP_N }}
+      BUZZ_RSS_DELAY_MS: ${{ vars.BUZZ_RSS_DELAY_MS }}
+      DIGEST_SKIP_BUZZ: ${{ vars.DIGEST_SKIP_BUZZ }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -88,6 +93,11 @@ jobs:
 
             echo "DIGEST_TIMEZONE=${DIGEST_TIMEZONE:-America/New_York}"
             echo "DIGEST_LANGUAGE=${DIGEST_LANGUAGE:-en}"
+
+            echo "BUZZ_HOURS_BACK=${BUZZ_HOURS_BACK:-4}"
+            echo "BUZZ_TOP_N=${BUZZ_TOP_N:-3}"
+            echo "BUZZ_RSS_DELAY_MS=${BUZZ_RSS_DELAY_MS:-30000}"
+            echo "DIGEST_SKIP_BUZZ=${DIGEST_SKIP_BUZZ:-false}"
           } >> "$GITHUB_ENV"
 
       - name: Select the 03:30 ET cron for the current DST period
@@ -146,5 +156,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: daily-ai-signal-output
-          path: output/*.md
+          path: |
+            output/*.md
+            output/research/*.md
           if-no-files-found: ignore

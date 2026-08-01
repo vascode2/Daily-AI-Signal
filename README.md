@@ -13,8 +13,10 @@ same Gemini + Notion conventions.
 1. **Collect** — pulls top posts from configured subreddits (Reddit public JSON API, no auth).
 2. **Filter & rank** — matches posts to your AI topics, drops noise, scores usefulness.
 3. **Summarize** — Gemini writes a concise, per-topic Markdown section.
-4. **Render** — assembles a dated Markdown digest, grouped by topic.
-5. **Publish** — saves `output/<date>.md` and creates a Notion child page (newest on top).
+4. **Research (AI Buzz)** — scans AI subreddits for the **last 4 hours**, ranks which AI
+   models/tools people are actually talking about, scores the mood, and explains why.
+5. **Render** — assembles a dated Markdown digest, grouped by topic.
+6. **Publish** — saves `output/<date>.md` and creates a Notion child page (newest on top).
 
 ## Topics tracked
 
@@ -46,11 +48,64 @@ into `NOTION_PAGE_ID`.
 ### Run
 
 ```bash
-npm start          # full pipeline: collect → summarize → save → publish to Notion
+npm start          # full pipeline: collect → summarize → buzz research → save → publish
 npm run collect    # same, but skip Notion (writes local Markdown only)
+npm run buzz       # AI Buzz research only (standalone report, no digest)
 npm test           # run the unit + integration tests (node:test, no deps)
 npm run e2e:x      # end-to-end smoke test of the X source (fixture → Gemini → Markdown)
 ```
+
+## 🔥 AI Buzz research (sentiment)
+
+Answers one question: **which AI is everyone talking about right now, and why?**
+
+It scans `r/codex`, `r/OpenAI`, `r/ChatGPT`, `r/ClaudeAI`, `r/ClaudeCode`, `r/vibecoding`,
+and `r/singularity` for posts from the last 4 hours, counts mentions of ~35 known
+models/tools, scores the mood, and asks Gemini to explain the top 3.
+
+```bash
+npm run buzz                      # last 4h, top 3, saves output/research/<date>-<HHMM>-buzz.md
+node scripts/buzz.js --hours=8    # widen the window
+node scripts/buzz.js --top=5      # more entities
+node scripts/buzz.js --json       # raw analysis, no Gemini call
+node scripts/buzz.js --notion     # also publish the report to Notion
+```
+
+Sample output:
+
+```markdown
+## 🔥 AI Buzz — last 4h
+
+> 92 posts analyzed across 7 subreddits
+> r/ChatGPT · r/ClaudeCode · r/codex · r/ClaudeAI · r/singularity · r/vibecoding · r/OpenAI
+
+1. **Claude** — 60 mentions · 5 subreddits · mostly positive (+9)
+   - **Why:** ...
+   - **Mood:** ...
+   - **Evidence:** [post](...) · [post](...)
+```
+
+How the ranking works (all deterministic — Gemini only writes the explanation):
+
+| Signal | Effect |
+| --- | --- |
+| Title mention | ×3 weight (capped at 2 per post) |
+| Body mention | ×1 weight (capped at 3 per post) |
+| Comment mention | ×1 weight (capped at 8 per post) |
+| Upvotes / comment count | logarithmic multiplier |
+| Recency inside the window | newer posts weigh more |
+| Cross-subreddit spread | +4 per extra subreddit |
+| Sentiment | AI-slang lexicon ("nerfed", "rate limit", "one-shot", …) with negation handling |
+
+The buzz step also runs inside `npm start` and is placed at the top of the daily
+digest. Disable it with `--skip-buzz`, `DIGEST_SKIP_BUZZ=true`, or
+`"enabled": false` in `config/buzz.json`.
+
+> **Reddit credentials matter here.** Without `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`
+> the collector falls back to anonymous RSS, which Reddit throttles to roughly one
+> request per 30s — a 7-subreddit run takes ~5 minutes and comment analysis is skipped.
+> With OAuth (free "script" app) the same run takes seconds and includes comment
+> sentiment. Subreddits that could not be reached are listed in the report.
 
 ### X.com source
 
@@ -163,9 +218,14 @@ This repo includes a scheduled workflow at
 - `XAI_API_BASE`
 - `XAI_MODEL`
 - `XAI_REQUEST_TIMEOUT_MS`
+- `BUZZ_HOURS_BACK` (default: `4`)
+- `BUZZ_TOP_N` (default: `3`)
+- `BUZZ_RSS_DELAY_MS` (default: `30000`, only used without Reddit OAuth)
+- `DIGEST_SKIP_BUZZ` (default: `false`)
 
 If Reddit OAuth secrets are not provided, the workflow still runs with Reddit RSS
-best-effort collection plus Hacker News.
+best-effort collection plus Hacker News. The AI Buzz step is much slower and skips
+comment sentiment in that mode.
 
 X is scaffolded in plugin form. To collect X posts, set
 `config/sources.json -> x.enabled = true`, then choose a mode:
@@ -180,6 +240,8 @@ X is scaffolded in plugin form. To collect X posts, set
 - `config/sources.json` — subreddits, sort (`top`/`hot`/`new`), time window, per-sub limit, min score.
 - `config/sources.json` — source settings for Reddit, Hacker News, and future X collection.
 - `config/topics.json` — topics, their matching keywords, and max posts per topic.
+- `config/buzz.json` — AI Buzz research: subreddits, time window, scoring weights, and the
+  entity registry (model/tool names + aliases) used for mention counting.
 
 All secrets and tunables live in `.env` (see `.env.example`).
 
@@ -189,11 +251,15 @@ All secrets and tunables live in `.env` (see `.env.example`).
 config/
   sources.json          # source configuration (Reddit today)
   topics.json           # topics + keywords for filtering/grouping
+  buzz.json             # AI Buzz research config + entity registry
 src/
   collectors/
     reddit.js           # Reddit collector (implements the collect() contract)
     hackernews.js       # Hacker News collector (official Firebase API)
     x.js                # X.com collector (api | playwright plugin scaffold)
+  research/
+    buzz.js             # short-window mention ranking (who is being talked about)
+    sentiment.js        # AI-slang sentiment lexicon (deterministic, offline)
   filter.js             # relevance filter, ranking, topic grouping
   summarize.js          # Gemini summarization (raw HTTP + model fallback)
   render-markdown.js    # builds and saves the Markdown digest
@@ -201,7 +267,9 @@ src/
   index.js              # pipeline orchestrator
 scripts/
   setup-notion.js       # one-time: create the Daily AI Signal parent page
+  buzz.js               # standalone AI Buzz research run
 output/                 # generated digests: <date>.md
+  research/             # standalone buzz reports: <date>-<HHMM>-buzz.md
 ```
 
 ## Adding a new source (X, GitHub, RSS, ...)
@@ -218,7 +286,9 @@ all operate on the normalized post shape.
 
 - [x] Reddit collection (MVP)
 - [x] Gemini summarization + Notion publishing
+- [x] AI Buzz sentiment research (4h window across AI subreddits)
 - [ ] LLM-based relevance scoring (replace keyword matching)
+- [ ] Buzz trend tracking across runs (who is rising / falling)
 - [ ] X.com / GitHub trending / RSS / newsletter sources
 - [ ] Scheduled daily run (GitHub Actions / cron)
 - [ ] Email / webhook / Slack delivery

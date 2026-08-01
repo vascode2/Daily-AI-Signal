@@ -1,0 +1,79 @@
+{
+  "enabled": true,
+  "hoursBack": 4,
+  "fallbackHoursBack": 12,
+  "minPostsForWindow": 12,
+  "topN": 3,
+  "limitPerSubreddit": 100,
+  "minMentions": 2,
+  "subreddits": [
+    "codex",
+    "OpenAI",
+    "ChatGPT",
+    "ClaudeAI",
+    "ClaudeCode",
+    "vibecoding",
+    "singularity"
+  ],
+  "comments": {
+    "enabled": true,
+    "allowWithoutOAuth": false,
+    "topPosts": 8,
+    "perPost": 25
+  },
+  "rss": {
+    "delayMs": 30000,
+    "retries": 3,
+    "backoffMs": 30000
+  },
+  "maxMentionsPerPost": {
+    "title": 2,
+    "body": 3,
+    "comment": 8
+  },
+  "weights": {
+    "title": 3,
+    "body": 1,
+    "comment": 1,
+    "engagement": 1.5,
+    "discussion": 1,
+    "spread": 4,
+    "recency": 2
+  },
+  "entities": [
+    { "name": "ChatGPT", "vendor": "OpenAI", "aliases": ["chatgpt", "chat gpt", "gpt-4o", "gpt4o", "gpt-5", "gpt5", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.5", "gpt-5.6", "o3", "o4-mini", "openai o3"] },
+    { "name": "OpenAI Codex", "vendor": "OpenAI", "aliases": ["codex", "codex cli", "codex-cli", "gpt-5-codex", "gpt-5.1-codex", "gpt-5.3-codex", "codex app"] },
+    { "name": "Sora", "vendor": "OpenAI", "aliases": ["sora", "sora 2"] },
+    { "name": "Claude", "vendor": "Anthropic", "aliases": ["claude", "opus", "sonnet", "haiku", "claude 3.5", "claude 4", "claude 4.5", "opus 4.5", "opus 4.6", "sonnet 4.5", "sonnet 4.6"] },
+    { "name": "Claude Code", "vendor": "Anthropic", "aliases": ["claude code", "claude-code", "cc cli", "claude cli"] },
+    { "name": "Gemini", "vendor": "Google", "aliases": ["gemini", "gemini 2.5", "gemini 3", "gemini 3.1", "gemini 3.5", "nano banana", "gemini cli", "gemini-cli"] },
+    { "name": "Antigravity", "vendor": "Google", "aliases": ["antigravity"] },
+    { "name": "Grok", "vendor": "xAI", "aliases": ["grok", "grok 4", "grok-4", "grok 4.1", "grok 5"] },
+    { "name": "Llama", "vendor": "Meta", "aliases": ["llama", "llama 3", "llama-3", "llama 4", "llama-4"] },
+    { "name": "DeepSeek", "vendor": "DeepSeek", "aliases": ["deepseek", "deepseek-r1", "deepseek r1", "deepseek v3", "deepseek-v3"] },
+    { "name": "Qwen", "vendor": "Alibaba", "aliases": ["qwen", "qwq", "qwen3", "qwen 3"] },
+    { "name": "Kimi", "vendor": "Moonshot", "aliases": ["kimi", "kimi k2", "moonshot ai"] },
+    { "name": "GLM", "vendor": "Zhipu", "aliases": ["glm", "glm-4", "glm 4.6", "chatglm"] },
+    { "name": "MiniMax", "vendor": "MiniMax", "aliases": ["minimax", "minimax m2"] },
+    { "name": "Mistral", "vendor": "Mistral", "aliases": ["mistral", "mixtral", "devstral", "magistral"] },
+    { "name": "Cursor", "vendor": "Anysphere", "aliases": ["cursor", "cursor ide", "composer"] },
+    { "name": "GitHub Copilot", "vendor": "GitHub", "aliases": ["copilot", "github copilot", "copilot cli"] },
+    { "name": "Windsurf", "vendor": "Windsurf", "aliases": ["windsurf", "codeium"] },
+    { "name": "Cline", "vendor": "Cline", "aliases": ["cline", "roo code", "roocode"] },
+    { "name": "Aider", "vendor": "Aider", "aliases": ["aider"] },
+    { "name": "Devin", "vendor": "Cognition", "aliases": ["devin"] },
+    { "name": "Lovable", "vendor": "Lovable", "aliases": ["lovable"] },
+    { "name": "v0", "vendor": "Vercel", "aliases": ["v0.dev", "v0 by vercel"] },
+    { "name": "Replit Agent", "vendor": "Replit", "aliases": ["replit agent", "replit"] },
+    { "name": "Bolt.new", "vendor": "StackBlitz", "aliases": ["bolt.new"] },
+    { "name": "Ollama", "vendor": "Ollama", "aliases": ["ollama"] },
+    { "name": "LM Studio", "vendor": "LM Studio", "aliases": ["lm studio", "lmstudio"] },
+    { "name": "vLLM", "vendor": "vLLM", "aliases": ["vllm"] },
+    { "name": "llama.cpp", "vendor": "ggml", "aliases": ["llama.cpp", "llamacpp", "ggml", "gguf"] },
+    { "name": "Perplexity", "vendor": "Perplexity", "aliases": ["perplexity"] },
+    { "name": "Midjourney", "vendor": "Midjourney", "aliases": ["midjourney"] },
+    { "name": "Stable Diffusion", "vendor": "Stability", "aliases": ["stable diffusion", "sdxl", "comfyui"] },
+    { "name": "MCP", "vendor": "Anthropic", "aliases": ["mcp", "model context protocol"] },
+    { "name": "n8n", "vendor": "n8n", "aliases": ["n8n"] }
+  ]
+}

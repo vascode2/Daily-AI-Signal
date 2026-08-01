@@ -142,13 +142,14 @@ function parseAtom(xml, subreddit) {
   });
 }
 
-async function fetchSubredditRss(subreddit, { sort, timeWindow, limit }) {
+async function fetchSubredditRss(subreddit, { sort, timeWindow, limit, retries, backoffMs }) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (sort === 'top') params.set('t', timeWindow);
   const url = `https://www.reddit.com/r/${subreddit}/${sort}/.rss?${params}`;
 
   // Reddit rate-limits anonymous RSS; retry a few times with backoff on 429/5xx.
-  const maxAttempts = Number(process.env.REDDIT_RSS_RETRIES || 2);
+  const maxAttempts = retries || Number(process.env.REDDIT_RSS_RETRIES || 2);
+  const baseBackoff = backoffMs || 3000;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const res = await fetch(url, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'application/atom+xml' },
@@ -160,7 +161,7 @@ async function fetchSubredditRss(subreddit, { sort, timeWindow, limit }) {
     }
     if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
       const retryAfter = parseFloat(res.headers.get('retry-after') || '0');
-      const wait = retryAfter > 0 ? retryAfter * 1000 : 3000 * attempt;
+      const wait = retryAfter > 0 ? retryAfter * 1000 : baseBackoff * attempt;
       console.log(`[${SOURCE}] r/${subreddit} ${res.status}; retrying in ${wait}ms`);
       await sleep(wait);
       continue;
@@ -168,6 +169,97 @@ async function fetchSubredditRss(subreddit, { sort, timeWindow, limit }) {
     throw new Error(`HTTP ${res.status} for r/${subreddit} (rss)`);
   }
   throw new Error(`HTTP 429 for r/${subreddit} (rss, exhausted retries)`);
+}
+
+/** True when Reddit OAuth credentials are configured (richer data, no throttling). */
+export function hasOAuth() {
+  return Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET);
+}
+
+// ── Comments (used by the buzz/sentiment research mode) ──────────
+
+/** Turn any post permalink into the `/r/<sub>/comments/<id>/...` path. */
+function commentPath(permalink) {
+  try {
+    return new URL(permalink).pathname.replace(/\/+$/, '');
+  } catch {
+    return String(permalink || '').replace(/^https?:\/\/[^/]+/, '').replace(/\/+$/, '');
+  }
+}
+
+/**
+ * Extract comment bodies from Reddit's `[postListing, commentListing]` JSON.
+ * Exported for testing — the OAuth comment path cannot run without credentials.
+ */
+export function parseCommentListing(json, limit = 25) {
+  const listing = Array.isArray(json) ? json[1] : json;
+  const out = [];
+  const walk = children => {
+    for (const c of children || []) {
+      if (out.length >= limit) return;
+      if (c?.kind !== 't1' || !c.data) continue;
+      const body = (c.data.body || '').trim();
+      if (body && body !== '[deleted]' && body !== '[removed]') {
+        out.push({ body: body.slice(0, 1200), score: c.data.score || 0 });
+      }
+      if (c.data.replies?.data?.children) walk(c.data.replies.data.children);
+    }
+  };
+  walk(listing?.data?.children);
+  return out.slice(0, limit);
+}
+
+async function fetchCommentsOAuth(path, limit) {
+  const token = await getAccessToken();
+  const url = `https://oauth.reddit.com${path}?limit=${limit}&sort=top&depth=2`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, 'User-Agent': USER_AGENT },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for comments ${path}`);
+
+  return parseCommentListing(await res.json(), limit);
+}
+
+async function fetchCommentsRss(path, limit) {
+  const url = `https://www.reddit.com${path}/.rss?limit=${limit}&sort=top`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': BROWSER_UA, Accept: 'application/atom+xml' },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for comments ${path} (rss)`);
+
+  const xml = await res.text();
+  const entries = xml.match(/<entry>[\s\S]*?<\/entry>/g) || [];
+  // The first entry of a comment feed is the post itself; the rest are comments.
+  return entries
+    .slice(1)
+    .map(e => ({ body: stripHtml(tag(e, 'content')).slice(0, 1200), score: 0 }))
+    .filter(c => c.body)
+    .slice(0, limit);
+}
+
+/**
+ * Fetch top-level-ish comments for a single post. Best-effort: returns [] on any
+ * failure so callers never have to guard it.
+ *
+ * @param {string} permalink - full post permalink
+ * @param {number} limit
+ * @returns {Promise<Array<{body: string, score: number}>>}
+ */
+export async function fetchComments(permalink, limit = 25) {
+  const path = commentPath(permalink);
+  if (!path.includes('/comments/')) return [];
+
+  const useOAuth = Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET);
+  try {
+    return useOAuth
+      ? await fetchCommentsOAuth(path, limit)
+      : await fetchCommentsRss(path, limit);
+  } catch (err) {
+    console.warn(`[${SOURCE}] comments failed for ${path}: ${err.message}`);
+    return [];
+  }
 }
 
 // ── Public collect() ─────────────────────────────────────────────
@@ -183,18 +275,29 @@ export async function collect(config) {
     sort = 'top',
     timeWindow = 'day',
     limitPerSubreddit = 25,
-    minScore = 0
+    minScore = 0,
+    // Pacing overrides — the buzz research mode needs to be far more patient than
+    // the daily digest, because anonymous RSS only allows ~1 request per ~30s.
+    delayMs,
+    rssRetries,
+    rssBackoffMs,
+    max429Failures
   } = config;
 
-  const useOAuth = Boolean(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET);
+  const useOAuth = hasOAuth();
   const fetchOne = useOAuth ? fetchSubredditOAuth : fetchSubredditRss;
   console.log(`[${SOURCE}] mode: ${useOAuth ? 'OAuth (JSON)' : 'RSS (no auth, limited data)'}`);
 
   // Space anonymous RSS requests out (with jitter) to avoid Reddit rate limits.
-  const gapMs = useOAuth
-    ? Number(process.env.REDDIT_DELAY_MS || 600)
-    : Number(process.env.REDDIT_DELAY_MS || 2500);
-  const max429SubredditFailures = Number(process.env.REDDIT_RSS_MAX_429_SUBS || 3);
+  const gapMs =
+    delayMs ??
+    (useOAuth
+      ? Number(process.env.REDDIT_DELAY_MS || 600)
+      : Number(process.env.REDDIT_DELAY_MS || 2500));
+  // 0 (or a negative value) means "never stop early" — used by the research mode,
+  // where breadth across subreddits matters more than a short runtime.
+  const max429SubredditFailures =
+    max429Failures ?? Number(process.env.REDDIT_RSS_MAX_429_SUBS || 3);
 
   // In RSS mode Reddit hard-throttles by IP, so only a few subreddits get through
   // per run. Shuffle the order so coverage rotates across daily runs instead of
@@ -208,26 +311,37 @@ export async function collect(config) {
   }
 
   const all = [];
+  const covered = [];
+  const failed = [];
   let rss429Failures = 0;
   for (const sub of order) {
     try {
-      const posts = await fetchOne(sub, { sort, timeWindow, limit: limitPerSubreddit });
+      const posts = await fetchOne(sub, {
+        sort,
+        timeWindow,
+        limit: limitPerSubreddit,
+        retries: rssRetries,
+        backoffMs: rssBackoffMs
+      });
       // Only apply the min-score gate when scores are actually known (OAuth).
       const kept = posts.filter(p => p.score === 0 || p.score >= minScore);
       all.push(...kept);
+      covered.push(sub);
       console.log(`[${SOURCE}] r/${sub}: ${kept.length} posts`);
       rss429Failures = 0;
       await sleep(gapMs + Math.floor(Math.random() * 700));
     } catch (err) {
+      failed.push(sub);
       console.error(`[${SOURCE}] r/${sub} failed: ${err.message}`);
       if (!useOAuth && /HTTP 429/.test(err.message)) {
         rss429Failures += 1;
-        if (rss429Failures >= max429SubredditFailures) {
+        if (max429SubredditFailures > 0 && rss429Failures >= max429SubredditFailures) {
           console.warn(
             `[${SOURCE}] too many RSS 429 failures (${rss429Failures}); stopping early to keep runtime reasonable.`
           );
           break;
         }
+        await sleep(gapMs);
       }
     }
   }
@@ -235,6 +349,11 @@ export async function collect(config) {
   const seen = new Set();
   const unique = all.filter(p => (seen.has(p.id) ? false : seen.add(p.id)));
   console.log(`[${SOURCE}] collected ${unique.length} unique posts.`);
+  // Attached (non-enumerable) so the array still behaves like a plain post list.
+  Object.defineProperty(unique, 'coverage', {
+    value: { covered, failed, requested: subreddits.length },
+    enumerable: false
+  });
   return unique;
 }
 
