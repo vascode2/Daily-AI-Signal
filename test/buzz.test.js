@@ -267,24 +267,127 @@ test('buzz markdown converts to Notion numbered-list blocks with links', () => {
     '1. **Claude Code** — 37 mentions · 2 subreddits · mixed (-5)',
     '   - **Why:** people are hitting usage limits.',
     '   - **Evidence:** [post](https://www.reddit.com/r/ClaudeCode/comments/b2/x/)',
+    '2. **Codex** — 21 mentions · 3 subreddits · mostly positive (+8)',
+    '   - **Why:** long-running task reliability.',
+    '3. **Gemini** — 12 mentions · 1 subreddit · neutral',
     '',
     '**Also mentioned:** Cursor (4)'
   ].join('\n');
 
   const blocks = markdownToNotionBlocks(md);
-  const types = blocks.map(b => b.type);
-  assert.equal(types[0], 'heading_2');
-  assert.ok(types.includes('numbered_list_item'), `got: ${types.join(', ')}`);
-  assert.ok(types.includes('bulleted_list_item'));
+  assert.equal(blocks[0].type, 'heading_2');
 
-  const numbered = blocks.find(b => b.type === 'numbered_list_item');
-  assert.match(numbered.numbered_list_item.rich_text.map(t => t.text.content).join(''), /Claude Code/);
+  // The three ranked entries must stay contiguous siblings, otherwise Notion
+  // restarts the numbering at "1." for every entry.
+  const ranked = blocks.filter(b => b.type === 'numbered_list_item');
+  assert.equal(ranked.length, 3);
+  const firstIdx = blocks.indexOf(ranked[0]);
+  assert.deepEqual(
+    blocks.slice(firstIdx, firstIdx + 3).map(b => b.type),
+    ['numbered_list_item', 'numbered_list_item', 'numbered_list_item'],
+    'nothing may be interleaved between ranked entries'
+  );
+  assert.ok(
+    !blocks.some(b => b.type === 'bulleted_list_item'),
+    'detail lines belong to their entry, not the top level'
+  );
 
-  const evidence = blocks.find(b =>
-    b.type === 'bulleted_list_item' &&
-    b.bulleted_list_item.rich_text.some(t => t.text.link)
+  const children = ranked[0].numbered_list_item.children;
+  assert.equal(children.length, 2);
+  assert.ok(children.every(c => c.type === 'bulleted_list_item'));
+
+  const evidence = children.find(c =>
+    c.bulleted_list_item.rich_text.some(t => t.text.link)
   );
   assert.ok(evidence, 'evidence link survives the Notion conversion');
+  assert.match(
+    evidence.bulleted_list_item.rich_text.find(t => t.text.link).text.link.url,
+    /reddit\.com/
+  );
+
+  assert.equal(ranked[2].numbered_list_item.children, undefined, 'no empty children array');
+  assert.equal(blocks.at(-1).type, 'paragraph', '"Also mentioned" closes the list');
+});
+
+test('list nesting never exceeds the depth Notion accepts on create', () => {
+  const md = [
+    '- level one',
+    '  - level two',
+    '    - level three',
+    '      - level four'
+  ].join('\n');
+
+  const blocks = markdownToNotionBlocks(md);
+  assert.equal(blocks.length, 1);
+
+  const depthOf = (block, d = 1) => {
+    const children = block[block.type].children || [];
+    return children.length === 0 ? d : Math.max(...children.map(c => depthOf(c, d + 1)));
+  };
+  assert.equal(depthOf(blocks[0]), 2, 'deeper markdown levels collapse onto the parent');
+
+  // Nothing is dropped — the deeper items are flattened, not discarded.
+  const texts = blocks[0].bulleted_list_item.children.map(c =>
+    c.bulleted_list_item.rich_text.map(t => t.text.content).join('')
+  );
+  assert.deepEqual(texts, ['level two', 'level three', 'level four']);
+});
+
+test('the published digest payload satisfies Notion API constraints', async t => {
+  const previous = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY; // keep the test offline and deterministic
+  t.after(() => {
+    if (previous !== undefined) process.env.GEMINI_API_KEY = previous;
+  });
+
+  const { result, config } = await analyzeFixture();
+  const withTop = { ...result, top: result.entities.slice(0, config.topN || 3) };
+  const section = await summarizeBuzz(withTop); // no API key -> fallback
+
+  const markdown = buildDigest({
+    date: '2026-08-01',
+    sections: [
+      {
+        topic: 'AI Coding Tools',
+        section: '- **[A tool](https://example.com/a)** — why it matters. (r/codex)'
+      }
+    ],
+    buzz: buildBuzzSection({ result: withTop, section }),
+    stats: { collected: 100, kept: 16, topics: 1, originCounts: { 'r/codex': 16 } }
+  });
+
+  const blocks = markdownToNotionBlocks(markdown);
+
+  const check = (block, depth) => {
+    assert.equal(block.object, 'block');
+    assert.ok(block.type && block[block.type], `block payload keyed by type: ${block.type}`);
+    assert.ok(depth <= 2, `nesting depth ${depth} exceeds what Notion accepts on create`);
+
+    const body = block[block.type];
+    const richText = body.rich_text || [];
+    assert.ok(richText.length <= 100, 'rich_text arrays stay under the 100-element cap');
+    for (const t of richText) {
+      assert.ok(t.text.content.length <= 2000, 'rich_text content stays under 2000 chars');
+      if (t.text.link) assert.match(t.text.link.url, /^https?:\/\//);
+    }
+    for (const child of body.children || []) check(child, depth + 1);
+  };
+
+  for (const block of blocks) check(block, 1);
+
+  // createDigestPage() sends the first 100 top-level blocks, then appends the rest.
+  for (let i = 0; i < blocks.length; i += 100) {
+    assert.ok(blocks.slice(i, i + 100).length <= 100);
+  }
+
+  // The buzz section must actually be present in what gets published.
+  const flat = JSON.stringify(blocks);
+  assert.match(flat, /AI Buzz/, 'buzz heading reaches Notion');
+  assert.match(flat, /Claude Code/, 'buzz ranking reaches Notion');
+  assert.ok(
+    blocks.filter(b => b.type === 'numbered_list_item').length >= 3,
+    'all ranked entries reach Notion as siblings'
+  );
 });
 
 test('empty buzz result renders a graceful message', () => {

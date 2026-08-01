@@ -173,27 +173,75 @@ export async function createDigestPage({ parentPageId, title, blocks, position, 
 
 // ── Markdown → Notion blocks ─────────────────────────────────────
 
+// Notion accepts at most two levels of blocks in a single create/append payload
+// (a block and its `children`), so deeper markdown indentation is flattened.
+const MAX_LIST_NESTING = 2;
+
+/** Build a list block from a trimmed line, or null when it is not a list item. */
+function listItemBlock(trimmed) {
+  if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+    return {
+      object: 'block',
+      type: 'bulleted_list_item',
+      bulleted_list_item: { rich_text: parseRichText(trimmed.slice(2)) }
+    };
+  }
+  // Ordered lists (used by the AI Buzz ranking: "1. **Claude** — ...").
+  const ordered = trimmed.match(/^\d{1,3}\.\s+(.*)$/);
+  if (ordered) {
+    return {
+      object: 'block',
+      type: 'numbered_list_item',
+      numbered_list_item: { rich_text: parseRichText(ordered[1]) }
+    };
+  }
+  return null;
+}
+
+function appendChild(parentBlock, childBlock) {
+  const body = parentBlock[parentBlock.type];
+  body.children = body.children || [];
+  body.children.push(childBlock);
+}
+
 export function markdownToNotionBlocks(md) {
   const blocks = [];
-  const lines = md.split('\n');
-  let i = 0;
+  // Currently open list items (outermost first) used to nest indented children.
+  // Without this, indented detail lines become top-level siblings, which breaks
+  // Notion's numbering (every numbered item would restart at "1.").
+  let openList = [];
 
-  while (i < lines.length) {
-    const line = lines[i];
+  for (const line of md.split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed) {
-      i++;
+    if (!trimmed) continue;
+
+    const listBlock = listItemBlock(trimmed);
+    if (listBlock) {
+      const indent = line.length - line.trimStart().length;
+      while (openList.length > 0 && indent <= openList[openList.length - 1].indent) {
+        openList.pop();
+      }
+      if (openList.length === 0) {
+        blocks.push(listBlock);
+      } else {
+        // Deeper-than-supported nesting collapses onto the deepest allowed parent.
+        const parentIndex = Math.min(openList.length, MAX_LIST_NESTING - 1) - 1;
+        appendChild(openList[parentIndex].block, listBlock);
+      }
+      openList.push({ indent, block: listBlock });
       continue;
     }
+
+    // Any non-list line ends the current list context.
+    openList = [];
 
     if (trimmed === '---') {
       blocks.push({ object: 'block', type: 'divider', divider: {} });
-      i++;
       continue;
     }
-    if (trimmed.startsWith('# ')) { blocks.push(headingBlock(1, trimmed.slice(2))); i++; continue; }
-    if (trimmed.startsWith('## ')) { blocks.push(headingBlock(2, trimmed.slice(3))); i++; continue; }
-    if (trimmed.startsWith('### ')) { blocks.push(headingBlock(3, trimmed.slice(4))); i++; continue; }
+    if (trimmed.startsWith('# ')) { blocks.push(headingBlock(1, trimmed.slice(2))); continue; }
+    if (trimmed.startsWith('## ')) { blocks.push(headingBlock(2, trimmed.slice(3))); continue; }
+    if (trimmed.startsWith('### ')) { blocks.push(headingBlock(3, trimmed.slice(4))); continue; }
 
     if (trimmed.startsWith('> ')) {
       blocks.push({
@@ -201,28 +249,6 @@ export function markdownToNotionBlocks(md) {
         type: 'quote',
         quote: { rich_text: parseRichText(trimmed.slice(2)) }
       });
-      i++;
-      continue;
-    }
-    if (trimmed.startsWith('- ')) {
-      blocks.push({
-        object: 'block',
-        type: 'bulleted_list_item',
-        bulleted_list_item: { rich_text: parseRichText(trimmed.slice(2)) }
-      });
-      i++;
-      continue;
-    }
-
-    // Ordered lists (used by the AI Buzz ranking: "1. **Claude** — ...").
-    const ordered = trimmed.match(/^\d{1,3}\.\s+(.*)$/);
-    if (ordered) {
-      blocks.push({
-        object: 'block',
-        type: 'numbered_list_item',
-        numbered_list_item: { rich_text: parseRichText(ordered[1]) }
-      });
-      i++;
       continue;
     }
 
@@ -231,7 +257,6 @@ export function markdownToNotionBlocks(md) {
       type: 'paragraph',
       paragraph: { rich_text: parseRichText(trimmed) }
     });
-    i++;
   }
   return blocks;
 }
