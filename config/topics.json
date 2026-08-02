@@ -19,7 +19,7 @@
     },
     {
       "name": "AI Automation",
-      "keywords": ["automation", "automate", "workflow", "n8n", "make.com", "zapier", "pipeline", "orchestration", "batch processing", "scheduled"]
+      "keywords": ["automation", "automate", "workflow", "n8n", "make.com", "zapier", "pipeline", "orchestration", "batch processing", "scheduled", "integromat", "no-code", "nocode", "low-code", "lowcode", "webhook", "api integration", "trigger", "connect apps", "airtable"]
     },
     {
       "name": "AI App Development",
@@ -27,7 +27,7 @@
     },
     {
       "name": "AI Productivity & Business",
-      "keywords": ["productivity", "side project", "saas", "monetize", "monetization", "startup", "business idea", "use case", "prompt engineering", "workflow", "revenue"]
+      "keywords": ["productivity", "side project", "saas", "monetize", "monetization", "startup", "business idea", "use case", "prompt engineering", "workflow", "revenue", "chatgpt", "gpt-4", "gpt-5", "openai api", "assistants api"]
     },
     {
       "name": "AI Hardware & Edge",
@@ -35,7 +35,7 @@
     },
     {
       "name": "Practical AI Tools",
-      "keywords": ["tool", "utility", "cli tool", "extension", "plugin", "open sourced", "released", "built a", "i made", "showcase", "demo", "practical", "developer tool"]
+      "keywords": ["tool", "utility", "cli tool", "extension", "plugin", "open sourced", "released", "built a", "i made", "showcase", "demo", "practical", "developer tool", "vibecoding", "vibe code", "claude code", "codex cli", "open-sourced"]
     }
   ]
 }
